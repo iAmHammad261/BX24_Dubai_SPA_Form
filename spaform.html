@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dubai SPA Form</title>
+<script src="https://api.bitrix24.com/api/v1/"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<style>
+  body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; background: #eef1f3; color: #1d2733; }
+  .topbar { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 14px;
+            padding: 10px 16px; background: #0e5a3c; color: #fff; }
+  .topbar h1 { font-size: 15px; margin: 0; font-weight: 600; }
+  .topbar .status { font-size: 12px; opacity: .9; flex: 1; }
+  .topbar button { background: #fff; color: #0e5a3c; border: 0; border-radius: 6px;
+                   padding: 8px 16px; font-weight: 600; cursor: pointer; font-size: 13px; }
+  .topbar button:disabled { opacity: .5; cursor: default; }
+  .page { max-width: 210mm; margin: 16px auto; background: #fff; padding: 14mm 12mm;
+          box-shadow: 0 2px 10px rgba(0,0,0,.12); }
+
+  /* ── Rendered SPA document ── */
+  #spaRoot { font-family: 'Times New Roman', Georgia, serif; font-size: 11px; line-height: 1.45; color: #000; }
+  #spaRoot h1, #spaRoot h2, #spaRoot h3 { font-size: 12px; margin: 10px 0 4px; }
+  #spaRoot p { margin: 4px 0; }
+  #spaRoot table { border-collapse: collapse; width: 100%; margin: 6px 0; table-layout: fixed; }
+  #spaRoot td, #spaRoot th { border: 1px solid #555; padding: 4px 6px; vertical-align: top;
+                             word-wrap: break-word; overflow-wrap: anywhere; }
+  #spaRoot tr { page-break-inside: avoid; }
+  #spaRoot strong { font-weight: 700; }
+  .ar-val, [dir="rtl"] { direction: rtl; text-align: right; unicode-bidi: plaintext; }
+
+  /* ── Schedule A generated table ── */
+  #scheduleA-installments .schedA-summary { display: grid; grid-template-columns: 1fr 1fr;
+        gap: 2px 16px; margin: 6px 0 8px; font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; }
+  table.schedA { border-collapse: collapse; width: 100%; font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; }
+  table.schedA th, table.schedA td { border: 1px solid #555; padding: 4px 6px; }
+  table.schedA th { background: #0e5a3c; color: #fff; font-weight: 600; }
+  table.schedA td.c { text-align: center; }
+  table.schedA td.r { text-align: right; }
+  table.schedA tr.total td { font-weight: 800; background: #eef3f0; }
+  table.schedA tr.balloon-row td { font-style: italic; background: #f6faf8; }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <h1>Dubai SPA Form</h1>
+    <span class="status" id="status">Loading…</span>
+    <button id="attachBtn" disabled onclick="attachToDeal()">Attach to Deal</button>
+  </div>
+  <div class="page"><div id="spaRoot"></div></div>
+
+<script>
+/* ════════════════ CONFIG ════════════════ */
+const JSON_FIELD     = 'UF_CRM_1781355927497';   // payment-plan JSON on the deal
+const SPA_FILE_FIELD = 'UF_CRM_1781467358140';   // file field to attach the SPA PDF
+
+// Contact fields
+const C_TYPE        = 'UF_CRM_1767876111269';     // enum Purchaser 1 / 2
+const C_ADDRESS     = 'UF_CRM_1767353184396';
+const C_POBOX       = 'UF_CRM_1781458421648';
+const C_CITY        = 'UF_CRM_1781458367322';
+const C_COUNTRY     = 'UF_CRM_1781458379196';
+const C_NATIONALITY = 'UF_CRM_1767691283';
+const C_PASSPORT    = 'UF_CRM_1766983512371';
+const C_EXP         = 'UF_CRM_1781467043973';
+const C_NOM_NAME    = 'UF_CRM_1781467071988';
+const C_NOM_NAT     = 'UF_CRM_1781467099554';
+const C_NOM_PASS    = 'UF_CRM_1781467123055';
+const C_NOM_EXP     = 'UF_CRM_1781467149267';
+
+// Deal fields
+const D_PARKING     = 'UF_CRM_1781467165113';
+const D_PAYMODE     = 'UF_CRM_1781467248957';
+const D_BANK        = 'UF_CRM_1781467271543';
+const D_COMPLETION  = 'UF_CRM_1781467301674';
+const D_WITNESS     = 'UF_CRM_1781467320678';
+
+// Product (catalog) property IDs
+const PROD_TYPE = 177;   // Unit Type
+const PROD_AREA = 259;   // Area (per client: use 259, ignore template's 113)
+
+// Fees / assumptions
+const ADMIN_FEE = 5250;  // AED flat
+const DLD_RATE  = 0.04;  // 4% of purchase price (shown separately)
+const HANDOVER_MONTHS = 24;
+
+/* ════════════════ INSTALLMENT SCHEDULES (identical to Booking Form) ════════════════ */
+const SCHEDULES = {
+    '60_40': [
+        { label: 'Downpayment',     pct: 20, when: { type: 'booking', months: 0 } },
+        { label: '1st Installment', pct: 5,  when: { type: 'booking', months: 3 } },
+        { label: '2nd Installment', pct: 5,  when: { type: 'booking', months: 6 } },
+        { label: '3rd Installment', pct: 5,  when: { type: 'booking', months: 9 } },
+        { label: '4th Installment', pct: 10, when: { type: 'booking', months: 12 } },
+        { label: '5th Installment', pct: 5,  when: { type: 'booking', months: 15 } },
+        { label: '6th Installment', pct: 5,  when: { type: 'booking', months: 18 } },
+        { label: '7th Installment', pct: 5,  when: { type: 'booking', months: 21 } },
+        { label: 'Completion',      pct: 40, when: { type: 'completion' } }
+    ],
+    '3_years': [
+        { label: 'Downpayment',      pct: 20, when: { type: 'booking', months: 0 } },
+        { label: '1st Installment',  pct: 5,  when: { type: 'booking', months: 5 } },
+        { label: '2nd Installment',  pct: 5,  when: { type: 'booking', months: 9 } },
+        { label: '3rd Installment',  pct: 10, when: { type: 'booking', months: 13 } },
+        { label: '4th Installment',  pct: 5,  when: { type: 'booking', months: 17 } },
+        { label: '5th Installment',  pct: 5,  when: { type: 'booking', months: 21 } },
+        { label: '6th Installment',  pct: 10, when: { type: 'completion' } },
+        { label: '7th Installment',  pct: 3,  when: { type: 'handover', months: 3 } },
+        { label: '8th Installment',  pct: 3,  when: { type: 'handover', months: 6 } },
+        { label: '9th Installment',  pct: 3,  when: { type: 'handover', months: 9 } },
+        { label: '10th Installment', pct: 5,  when: { type: 'handover', months: 12 } },
+        { label: '11th Installment', pct: 3,  when: { type: 'handover', months: 16 } },
+        { label: '12th Installment', pct: 3,  when: { type: 'handover', months: 18 } },
+        { label: '13th Installment', pct: 3,  when: { type: 'handover', months: 21 } },
+        { label: '14th Installment', pct: 5,  when: { type: 'handover', months: 24 } },
+        { label: '15th Installment', pct: 3,  when: { type: 'handover', months: 27 } },
+        { label: '16th Installment', pct: 3,  when: { type: 'handover', months: 30 } },
+        { label: '17th Installment', pct: 3,  when: { type: 'handover', months: 33 } },
+        { label: '18th Installment', pct: 3,  when: { type: 'handover', months: 36 } }
+    ],
+    '5_years': [
+        { label: 'Downpayment',      pct: 20, when: { type: 'booking', months: 0 } },
+        { label: '1st Installment',  pct: 5,  when: { type: 'booking', months: 5 } },
+        { label: '2nd Installment',  pct: 5,  when: { type: 'booking', months: 9 } },
+        { label: '3rd Installment',  pct: 10, when: { type: 'booking', months: 13 } },
+        { label: '4th Installment',  pct: 5,  when: { type: 'booking', months: 17 } },
+        { label: '5th Installment',  pct: 5,  when: { type: 'booking', months: 21 } },
+        { label: '6th Installment',  pct: 10, when: { type: 'completion' } },
+        { label: '7th Installment',  pct: 4,  when: { type: 'handover', months: 6 } },
+        { label: '8th Installment',  pct: 4,  when: { type: 'handover', months: 12 } },
+        { label: '9th Installment',  pct: 4,  when: { type: 'handover', months: 18 } },
+        { label: '10th Installment', pct: 4,  when: { type: 'handover', months: 24 } },
+        { label: '11th Installment', pct: 4,  when: { type: 'handover', months: 30 } },
+        { label: '12th Installment', pct: 4,  when: { type: 'handover', months: 36 } },
+        { label: '13th Installment', pct: 4,  when: { type: 'handover', months: 42 } },
+        { label: '14th Installment', pct: 4,  when: { type: 'handover', months: 48 } },
+        { label: '15th Installment', pct: 4,  when: { type: 'handover', months: 54 } },
+        { label: '16th Installment', pct: 4,  when: { type: 'handover', months: 60 } }
+    ]
+};
+
+/* ════════════════ AR LOOKUPS (common UAE values; fall back to English) ════════════════ */
+const CITY_AR = { 'dubai':'دبي','abu dhabi':'أبو ظبي','sharjah':'الشارقة','ajman':'عجمان',
+    'al ain':'العين','ras al khaimah':'رأس الخيمة','fujairah':'الفجيرة','umm al quwain':'أم القيوين' };
+const COUNTRY_AR = { 'united arab emirates':'الإمارات العربية المتحدة','uae':'الإمارات العربية المتحدة',
+    'india':'الهند','pakistan':'باكستان','united kingdom':'المملكة المتحدة','uk':'المملكة المتحدة',
+    'united states':'الولايات المتحدة','usa':'الولايات المتحدة','canada':'كندا','egypt':'مصر',
+    'saudi arabia':'المملكة العربية السعودية','jordan':'الأردن','lebanon':'لبنان','syria':'سوريا',
+    'china':'الصين','russia':'روسيا','germany':'ألمانيا','france':'فرنسا','philippines':'الفلبين',
+    'nigeria':'نيجيريا','iran':'إيران','iraq':'العراق','kuwait':'الكويت','qatar':'قطر',
+    'bahrain':'البحرين','oman':'عُمان','turkey':'تركيا','bangladesh':'بنغلاديش','sri lanka':'سريلانكا' };
+const NAT_AR = { 'emirati':'إماراتي','indian':'هندي','pakistani':'باكستاني','british':'بريطاني',
+    'american':'أمريكي','canadian':'كندي','egyptian':'مصري','saudi':'سعودي','jordanian':'أردني',
+    'lebanese':'لبناني','syrian':'سوري','chinese':'صيني','russian':'روسي','german':'ألماني',
+    'french':'فرنسي','filipino':'فلبيني','nigerian':'نيجيري','iranian':'إيراني','iraqi':'عراقي',
+    'kuwaiti':'كويتي','qatari':'قطري','bahraini':'بحريني','omani':'عُماني','turkish':'تركي',
+    'bangladeshi':'بنغلاديشي','sri lankan':'سريلانكي' };
+const PAYMODE_AR = { 'cash':'نقدًا','cheque':'شيك','check':'شيك','bank transfer':'تحويل بنكي',
+    'telegraphic transfer':'تحويل برقي','credit card':'بطاقة ائتمان','wire transfer':'تحويل بنكي' };
+
+function arLookup(table, en) {
+    const k = String(en == null ? '' : en).trim().toLowerCase();
+    if (!k) return '';
+    return table[k] || en;   // fall back to English when not in the lookup
+}
+
+/* ════════════════ STATE ════════════════ */
+let currentDealId = null;
+let SPA_DATA = null;
+
+/* ════════════════ HELPERS (shared with Booking Form) ════════════════ */
+function callBX(method, params) {
+    return new Promise(function(resolve, reject) {
+        BX24.callMethod(method, params, function(res) {
+            if (res.error()) reject(res.error()); else resolve(res.data());
+        });
+    });
+}
+function esc(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function toNumber(raw) {
+    if (raw == null) return 0;
+    const n = parseFloat(String(raw).replace(/[^0-9.\-]/g, ''));
+    return isNaN(n) ? 0 : n;
+}
+function money(n) {
+    return 'AED ' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function pad(n) { return n < 10 ? '0' + n : '' + n; }
+function fmtDate(d) { return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear(); }
+function addMonths(date, m) {
+    const d = new Date(date.getTime());
+    const day = d.getDate();
+    d.setMonth(d.getMonth() + m);
+    if (d.getDate() < day) d.setDate(0);
+    return d;
+}
+// If a value looks like a Bitrix date/datetime, normalise to dd/mm/yyyy; otherwise return as-is.
+function maybeDate(v) {
+    if (!v) return '';
+    const s = String(v);
+    let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return m[3] + '/' + m[2] + '/' + m[1];
+    m = s.match(/^(\d{2})\.(\d{2})\.(\d{4})/);
+    if (m) return m[1] + '/' + m[2] + '/' + m[3];
+    return s;
+}
+function getMulti(contact, field) {
+    const v = contact[field];
+    if (Array.isArray(v) && v.length) return v[0].VALUE || v[0].value || '';
+    if (typeof v === 'string') return v;
+    return '';
+}
+function getUF(obj, code) {
+    if (!obj) return '';
+    let v = obj[code];
+    if (Array.isArray(v)) v = v[0];
+    if (v && typeof v === 'object') v = (v.value !== undefined ? v.value : v.VALUE);
+    return (v === undefined || v === null) ? '' : v;
+}
+function getProp(product, id) {
+    if (!product) return '';
+    const keys = ['property' + id, 'property_' + id, 'PROPERTY_' + id, String(id)];
+    for (let i = 0; i < keys.length; i++) {
+        let v = product[keys[i]];
+        if (v === undefined || v === null) continue;
+        if (Array.isArray(v)) v = v[0];
+        if (v && typeof v === 'object') { if (v.valueEnum) return v.valueEnum; return (v.value !== undefined ? v.value : v.VALUE); }
+        return v;
+    }
+    return '';
+}
+function ordinal(n) { const s = ['th','st','nd','rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
+function round2(n) { return Math.round(n * 100) / 100; }
+function parseInstNo(label) {
+    const m = String(label).match(/^(\d+)(st|nd|rd|th)\s+Installment/i);
+    return m ? parseInt(m[1], 10) : null;
+}
+function setStatus(msg, err) {
+    const el = document.getElementById('status');
+    el.textContent = msg; el.style.color = err ? '#ffd0d0' : '';
+}
+
+/* ════════════════ NUMBER → WORDS ════════════════ */
+function numToWordsEN(num) {
+    num = Math.floor(Number(num) || 0);
+    if (num === 0) return 'Zero';
+    const ones = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve',
+        'Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
+    const tens = ['','','Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
+    function below1000(n) {
+        let s = '';
+        if (n >= 100) { s += ones[Math.floor(n/100)] + ' Hundred'; n %= 100; if (n) s += ' '; }
+        if (n >= 20) { s += tens[Math.floor(n/10)]; n %= 10; if (n) s += '-' + ones[n]; }
+        else if (n > 0) { s += ones[n]; }
+        return s;
+    }
+    const scales = [[1e9,'Billion'],[1e6,'Million'],[1e3,'Thousand']];
+    let words = '';
+    for (let i = 0; i < scales.length; i++) {
+        const val = scales[i][0], name = scales[i][1];
+        if (num >= val) { const c = Math.floor(num/val); words += (words ? ' ' : '') + below1000(c) + ' ' + name; num %= val; }
+    }
+    if (num > 0) words += (words ? ' ' : '') + below1000(num);
+    return words;
+}
+// Arabic number-to-words — readable approximation; grammar (agreement/case) is simplified. Review for legal use.
+function numToWordsAR(num) {
+    num = Math.floor(Number(num) || 0);
+    if (num === 0) return 'صفر';
+    const ones = ['','واحد','اثنان','ثلاثة','أربعة','خمسة','ستة','سبعة','ثمانية','تسعة','عشرة',
+        'أحد عشر','اثنا عشر','ثلاثة عشر','أربعة عشر','خمسة عشر','ستة عشر','سبعة عشر','ثمانية عشر','تسعة عشر'];
+    const tens = ['','','عشرون','ثلاثون','أربعون','خمسون','ستون','سبعون','ثمانون','تسعون'];
+    const hundreds = ['','مئة','مئتان','ثلاثمئة','أربعمئة','خمسمئة','ستمئة','سبعمئة','ثمانمئة','تسعمئة'];
+    function below1000(n) {
+        const parts = [];
+        if (n >= 100) { parts.push(hundreds[Math.floor(n/100)]); n %= 100; }
+        if (n >= 20) { const o = n % 10; if (o) parts.push(ones[o] + ' و' + tens[Math.floor(n/10)]); else parts.push(tens[Math.floor(n/10)]); }
+        else if (n > 0) { parts.push(ones[n]); }
+        return parts.join(' و');
+    }
+    const scales = [[1e9,'مليار','ملياران','مليارات'],[1e6,'مليون','مليونان','ملايين'],[1e3,'ألف','ألفان','آلاف']];
+    const parts = [];
+    for (let i = 0; i < scales.length; i++) {
+        const val = scales[i][0], sing = scales[i][1], dual = scales[i][2], plur = scales[i][3];
+        if (num >= val) {
+            const c = Math.floor(num / val); num %= val;
+            if (c === 1) parts.push(sing);
+            else if (c === 2) parts.push(dual);
+            else if (c >= 3 && c <= 10) parts.push(below1000(c) + ' ' + plur);
+            else parts.push(below1000(c) + ' ' + sing);
+        }
+    }
+    if (num > 0) parts.push(below1000(num));
+    return parts.join(' و');
+}
+
+/* ════════════════ SCHEDULE ENGINE (identical logic to Booking Form) ════════════════ */
+function baseSchedule(plan, pj, booking, net) {
+    const completion = addMonths(booking, HANDOVER_MONTHS);
+    function dateFor(when) {
+        if (when.type === 'booking')    return addMonths(booking, when.months);
+        if (when.type === 'completion') return completion;
+        if (when.type === 'handover')   return addMonths(completion, when.months);
+        return booking;
+    }
+    if (SCHEDULES[plan]) {
+        return SCHEDULES[plan].map(function(it) {
+            const isCompletion = it.when.type === 'completion';
+            const d = dateFor(it.when);
+            return { label: it.label, pct: it.pct, amount: round2(net * it.pct / 100),
+                     dateStr: fmtDate(d), ts: d.getTime(),
+                     locked: (it.label === 'Downpayment' || isCompletion), instNo: parseInstNo(it.label) };
+        });
+    }
+    if (plan === 'full_payment') {
+        const d = pj.paymentDate ? new Date(pj.paymentDate) : booking;
+        const ok = !isNaN(d.getTime());
+        return [{ label: 'Full Payment', pct: 100, amount: net,
+                  dateStr: ok ? fmtDate(d) : fmtDate(booking), ts: ok ? d.getTime() : booking.getTime(),
+                  locked: true, instNo: null }];
+    }
+    if (plan === 'custom') return buildCustomSchedule(pj, net);
+    return [];
+}
+function buildCustomSchedule(pj, net) {
+    const dp  = toNumber(pj.downpaymentPct);
+    const pos = toNumber(pj.possessionPct);
+    const n   = Math.max(0, parseInt(pj.paymentPlanUnits, 10) || 0);
+    const freqMonths = ({ monthly:1, quarterly:3, biannually:6, annually:12 })[pj.innerPaymentPlan] || 1;
+    const dpDate  = pj.downpaymentDate ? new Date(pj.downpaymentDate) : new Date();
+    const posDate = pj.possessionDate ? new Date(pj.possessionDate) : null;
+    const rows = [];
+    rows.push({ label: 'Downpayment', pct: round2(dp), amount: round2(net * dp / 100),
+                dateStr: fmtDate(dpDate), ts: dpDate.getTime(), locked: true, instNo: null });
+    const instPctTotal = Math.max(0, 100 - dp - pos);
+    const each = n > 0 ? instPctTotal / n : 0;
+    for (let i = 1; i <= n; i++) {
+        const d = addMonths(dpDate, i * freqMonths);
+        rows.push({ label: ordinal(i) + ' Installment', pct: round2(each), amount: round2(net * each / 100),
+                    dateStr: fmtDate(d), ts: d.getTime(), locked: false, instNo: i });
+    }
+    rows.push({ label: 'On Possession', pct: round2(pos), amount: round2(net * pos / 100),
+                dateStr: posDate ? fmtDate(posDate) : '\u2014',
+                ts: posDate ? posDate.getTime() : Number.MAX_SAFE_INTEGER, locked: true, instNo: null });
+    return rows;
+}
+function buildSchedule(plan, pj, booking, net) {
+    const rows = applyBalloons(baseSchedule(plan, pj, booking, net), pj);
+    return rows.map(function(r, i) { r._i = i; return r; })
+        .sort(function(a, b) {
+            const ta = (a.ts == null ? Number.MAX_SAFE_INTEGER : a.ts);
+            const tb = (b.ts == null ? Number.MAX_SAFE_INTEGER : b.ts);
+            return (ta - tb) || (a._i - b._i);
+        });
+}
+function applyBalloons(rows, pj) {
+    const balloons = (Array.isArray(pj.balloonPayments) ? pj.balloonPayments : [])
+        .map(function(b) { return { position: parseInt(b.position, 10), amount: toNumber(b.amount) }; })
+        .filter(function(b) { return b.amount > 0; });
+    if (!balloons.length) return rows;
+    const poolBase = rows.reduce(function(a, r) { return a + (r.locked ? 0 : r.amount); }, 0);
+    const balloonTotal = balloons.reduce(function(a, b) { return a + b.amount; }, 0);
+    if (poolBase > 0) {
+        const scale = Math.max(0, poolBase - balloonTotal) / poolBase;
+        rows.forEach(function(r) { if (!r.locked) r.amount = round2(r.amount * scale); });
+    }
+    function brow(b, dateStr, ts) {
+        return { label: 'Balloon Payment', pct: '', amount: round2(b.amount),
+                 dateStr: dateStr, ts: ts, locked: true, instNo: null, balloon: true };
+    }
+    const matched = {};
+    rows.forEach(function(r) { if (r.instNo != null) matched[r.instNo] = true; });
+    const out = [];
+    let lastInstDate = '', lastInstTs = null;
+    rows.forEach(function(r) {
+        out.push(r);
+        if (r.instNo != null) {
+            lastInstDate = r.dateStr; lastInstTs = r.ts;
+            balloons.filter(function(b) { return b.position === r.instNo; })
+                    .forEach(function(b) { out.push(brow(b, r.dateStr, (r.ts || 0) + 1)); });
+        }
+    });
+    balloons.filter(function(b) { return !matched[b.position]; })
+            .forEach(function(b) {
+                let idx = -1;
+                out.forEach(function(r, i) { if (r.instNo != null) idx = i; });
+                out.splice(idx >= 0 ? idx + 1 : out.length, 0, brow(b, lastInstDate, (lastInstTs || 0) + 1));
+            });
+    return out;
+}
+
+/* ════════════════ LOAD ════════════════ */
+BX24.init(function() {
+    const info = BX24.placement.info();
+    currentDealId = info && info.options ? info.options.ID : null;
+    if (!currentDealId) { setStatus('Open this from inside a Deal.', true); return; }
+    loadAll().catch(function(e) {
+        console.error('[SPA] load error:', e);
+        setStatus('Could not load deal data (see console).', true);
+    });
+});
+
+async function loadAll() {
+    setStatus('Loading deal…');
+    const dealRes = await callBX('crm.deal.get', { id: currentDealId });
+    const deal = dealRes.result ? dealRes.result : dealRes;
+
+    let pj = {};
+    try { pj = JSON.parse(deal[JSON_FIELD] || '{}'); } catch (e) { pj = {}; }
+    const plan = pj.paymentPlan || '';
+
+    const contacts = await loadContacts();
+    const buyer = contacts[0] || null;
+
+    let product = null, unitName = '';
+    try {
+        const rowsData = await callBX('crm.deal.productrows.get', { id: currentDealId });
+        const rows = Array.isArray(rowsData) ? rowsData : (rowsData.result || []);
+        if (rows.length) {
+            unitName = rows[0].PRODUCT_NAME || '';
+            const pid = rows[0].PRODUCT_ID;
+            if (pid) { const pd = await callBX('catalog.product.get', { id: pid }); product = (pd && pd.product) ? pd.product : pd; }
+        }
+    } catch (e) { console.warn('[SPA] product load failed (check catalog scope):', e); }
+
+    SPA_DATA = buildContext(deal, buyer, product, unitName, pj, plan);
+    await renderSpa(SPA_DATA);
+    document.getElementById('attachBtn').disabled = false;
+    setStatus('Ready — review, then Attach to Deal.');
+    notifyResize();
+}
+
+async function loadContacts() {
+    let items = [];
+    try {
+        const r = await callBX('crm.deal.contact.items.get', { id: currentDealId });
+        items = Array.isArray(r) ? r : (r.result || []);
+    } catch (e) { console.warn('[SPA] contact items:', e); }
+    let typeMap = {};
+    try {
+        const ufRes = await callBX('crm.contact.userfield.list', { filter: { FIELD_NAME: C_TYPE } });
+        const ufs = Array.isArray(ufRes) ? ufRes : (ufRes.result || []);
+        if (ufs.length && ufs[0].LIST) ufs[0].LIST.forEach(function(o) { typeMap[o.ID] = o.VALUE; });
+    } catch (e) { /* fall back to order */ }
+    const loaded = [];
+    for (let i = 0; i < items.length; i++) {
+        const cid = items[i].CONTACT_ID || items[i].contactId;
+        if (!cid) continue;
+        try {
+            const cRes = await callBX('crm.contact.get', { id: cid });
+            const c = cRes.result ? cRes.result : cRes;
+            const typeLabel = (typeMap[getUF(c, C_TYPE)] || '').toLowerCase();
+            c.__order = (typeLabel.indexOf('2') !== -1) ? 2 : (typeLabel.indexOf('1') !== -1 ? 1 : (i + 1));
+            loaded.push(c);
+        } catch (e) { console.warn('[SPA] contact', cid, e); }
+    }
+    loaded.sort(function(a, b) { return a.__order - b.__order; });
+    return loaded;
+}
+
+/* ════════════════ CONTEXT ════════════════ */
+// Resolve a UF code from the contact first, then the deal.
+function field(contact, deal, code) {
+    const v = getUF(contact, code);
+    if (v !== '' && v != null) return v;
+    return getUF(deal, code);
+}
+function buildContext(deal, buyer, product, unitName, pj, plan) {
+    const today = new Date();
+    const discPct = toNumber(pj.discountPct);
+    const net = toNumber(deal.OPPORTUNITY);
+    const purchasePrice = (discPct > 0 && discPct < 100) ? round2(net / (1 - discPct / 100)) : net;
+    const discValue = round2(purchasePrice - net);
+    const dldFee = round2(purchasePrice * DLD_RATE);
+    const schedule = buildSchedule(plan, pj, today, net);
+    let downpaymentAmt = 0;
+    for (let i = 0; i < schedule.length; i++) {
+        if (schedule[i].label === 'Downpayment') { downpaymentAmt = schedule[i].amount; break; }
+    }
+    if (!downpaymentAmt && schedule.length) downpaymentAmt = schedule[0].amount;
+
+    const buyerName = buyer ? [buyer.NAME, buyer.SECOND_NAME, buyer.LAST_NAME].filter(Boolean).join(' ').trim() : '';
+    return {
+        today: today, deal: deal, buyer: buyer, product: product, pj: pj, plan: plan,
+        net: net, purchasePrice: purchasePrice, discPct: discPct, discValue: discValue,
+        dldFee: dldFee, adminFee: ADMIN_FEE, schedule: schedule,
+        downpaymentAmt: downpaymentAmt, buyerName: buyerName, unitName: unitName
+    };
+}
+
+/* ════════════════ PLACEHOLDER MAP ════════════════ */
+// Inner-id constants used for Arabic translation routing
+const I_CITY = 'UfCrm151776677095087', I_COUNTRY = 'UfCrm151776677134809',
+      I_NAT = 'UfCrm151776676964285', I_NOM_NAT = 'UfCrm151778950670679',
+      I_PAYMODE = 'UfCrm151778950818534', I_PRICE_WORDS = 'UfCrm151778950758041';
+
+function buildEnMap(d) {
+    const deal = d.deal, c = d.buyer;
+    const m = {};
+    m['{DocumentCreateTime}']          = fmtDate(d.today);
+    m['{UfCrm151776676644246}']        = d.buyerName;                          // Buyer Name
+    m['{UfCrm151776677178207}']        = field(c, deal, C_ADDRESS);            // Address
+    m['{UfCrm151776677041562}']        = field(c, deal, C_POBOX);             // P.O. Box
+    m['{UfCrm151776408293897}']        = '';                                   // Emirate (removed)
+    m['{UfCrm151776677095087}']        = field(c, deal, C_CITY);              // City
+    m['{UfCrm151776677210899}']        = getMulti(c || {}, 'PHONE');          // Phone/Mobile (standard mobile)
+    m['{UfCrm151776679367829}']        = getMulti(c || {}, 'EMAIL');          // Email
+    m['{UfCrm151776677134809}']        = field(c, deal, C_COUNTRY);           // Country
+    m['{UfCrm151776676964285}']        = field(c, deal, C_NATIONALITY);       // Nationality
+    m['{UfCrm151776677008771}']        = field(c, deal, C_PASSPORT);          // Passport No
+    m['{UfCrm151778950639813}']        = maybeDate(field(c, deal, C_EXP));     // Exp Date
+    m['{UfCrm151778950656579}']        = field(c, deal, C_NOM_NAME);          // Nominee Name
+    m['{UfCrm151778950670679}']        = field(c, deal, C_NOM_NAT);           // Nominee Nationality
+    m['{UfCrm151778950686842}']        = field(c, deal, C_NOM_PASS);          // Nominee Passport
+    m['{UfCrm151778950699925}']        = maybeDate(field(c, deal, C_NOM_EXP)); // Nominee Exp
+    m['{ProductsProductTitle}']        = d.unitName;                          // Unit No
+    m['{UfCrm151778950723706}']        = field(c, deal, D_PARKING);           // Parking
+    m['{ProductsProductProperty113}']  = getProp(d.product, PROD_AREA);        // Area (property 259)
+    m['{ProductsProductProperty177}']  = getProp(d.product, PROD_TYPE);        // Unit Type (property 177)
+    m['{UfCrm151778950758041}']        = (numToWordsEN(d.net) + ' UAE Dirhams Only').trim();  // Total in words
+    m['{UfCrm151778950818534}']        = field(c, deal, D_PAYMODE);           // Payment Mode
+    m['{DOWNPAYMENT_AMOUNT}']          = money(d.downpaymentAmt);             // actual down payment
+    m['{UfCrm151778937940306}']        = money(d.net);                        // Total Sale Price (numeric)
+    m['{UfCrm151778950836438}']        = field(c, deal, D_BANK);              // Bank
+    m['{UfCrm151778951218364}']        = maybeDate(field(c, deal, D_COMPLETION)); // Anticipated Completion
+    m['{UfCrm151778953417705}']        = field(c, deal, D_WITNESS);           // Witness Name
+    return m;
+}
+function arValueFor(inner, enMap, d) {
+    const en = enMap['{' + inner + '}'];
+    switch (inner) {
+        case I_CITY:        return arLookup(CITY_AR, en);
+        case I_COUNTRY:     return arLookup(COUNTRY_AR, en);
+        case I_NAT:
+        case I_NOM_NAT:     return arLookup(NAT_AR, en);
+        case I_PAYMODE:     return arLookup(PAYMODE_AR, en);
+        case I_PRICE_WORDS: return numToWordsAR(d.net) + ' درهم إماراتي فقط لا غير';
+        default:            return en;   // mirror (names, numbers, dates)
+    }
+}
+
+/* ════════════════ RENDER ════════════════ */
+async function renderSpa(d) {
+    setStatus('Building document…');
+    let skeleton;
+    try {
+        const r = await fetch('spa-skeleton.html', { cache: 'no-store' });
+        skeleton = await r.text();
+    } catch (e) {
+        setStatus('Could not load the SPA template skeleton.', true);
+        throw e;
+    }
+    const enMap = buildEnMap(d);
+
+    // 1) Arabic markers  {AR::inner}
+    let out = skeleton.replace(/\{AR::([A-Za-z0-9_]+)\}/g, function(_, inner) {
+        return esc(arValueFor(inner, enMap, d));
+    });
+    // 2) English/data placeholders
+    Object.keys(enMap).forEach(function(token) {
+        out = out.split(token).join(esc(enMap[token]));
+    });
+
+    const root = document.getElementById('spaRoot');
+    root.innerHTML = out;
+
+    // 3) Schedule A installment table
+    const slot = document.getElementById('scheduleA-installments');
+    if (slot) slot.innerHTML = scheduleAHtml(d);
+}
+
+function scheduleAHtml(d) {
+    let rows = '';
+    if (!d.schedule.length) {
+        rows = '<tr><td colspan="4">Installment schedule for this plan is not configured.</td></tr>';
+    } else {
+        d.schedule.forEach(function(r) {
+            const pctCell = (r.pct === '' || r.pct == null) ? '' : (r.pct + '%');
+            const cls = r.balloon ? ' class="balloon-row"' : '';
+            rows += '<tr' + cls + '>' +
+                '<td>' + esc(r.label) + '</td>' +
+                '<td class="c">' + esc(r.dateStr) + '</td>' +
+                '<td class="c">' + pctCell + '</td>' +
+                '<td class="r">' + money(r.amount) + '</td></tr>';
+        });
+        rows += '<tr class="total"><td>TOTAL</td><td></td><td class="c">100%</td><td class="r">' + money(d.net) + '</td></tr>';
+    }
+    return '' +
+        '<div class="schedA-summary">' +
+            '<div><b>Discount:</b> ' + (d.discPct || 0) + '% (' + money(d.discValue) + ')</div>' +
+            '<div><b>Net Payable:</b> ' + money(d.net) + '</div>' +
+            '<div><b>DLD Fee (4% of purchase price, payable separately):</b> ' + money(d.dldFee) + '</div>' +
+            '<div><b>Admin Fee (payable separately):</b> ' + money(d.adminFee) + '</div>' +
+        '</div>' +
+        '<table class="schedA"><thead><tr>' +
+            '<th>Installments</th><th>Payment Date</th><th>Payment %</th><th>Installment Amount (AED)</th>' +
+        '</tr></thead><tbody>' + rows + '</tbody></table>';
+}
+
+/* ════════════════ ATTACH ════════════════ */
+async function attachToDeal() {
+    const btn = document.getElementById('attachBtn');
+    btn.disabled = true; btn.textContent = 'Generating PDF…';
+    setStatus('Generating PDF (this can take a moment for a long document)…');
+    try {
+        const el = document.getElementById('spaRoot');
+        const opt = {
+            margin: [8, 8, 10, 8],
+            filename: 'Dubai_SPA_' + String(currentDealId) + '.pdf',
+            image: { type: 'jpeg', quality: 0.85 },
+            html2canvas: { scale: 1.5, useCORS: true, backgroundColor: '#ffffff' },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+            pagebreak: { mode: ['css', 'legacy'] }
+        };
+        const dataUri = await html2pdf().set(opt).from(el).outputPdf('datauristring');
+        const base64 = dataUri.split(',')[1];
+
+        btn.textContent = 'Attaching…';
+        setStatus('Uploading to the deal…');
+        const fields = {};
+        fields[SPA_FILE_FIELD] = { fileData: [opt.filename, base64] };
+        await callBX('crm.deal.update', { id: currentDealId, fields: fields });
+
+        setStatus('\u2713 Attached to the SPA field on the General tab.');
+        btn.textContent = 'Attached \u2713';
+        setTimeout(function() { btn.disabled = false; btn.textContent = 'Attach to Deal'; }, 2500);
+    } catch (e) {
+        console.error('[SPA] attach error:', e);
+        setStatus('Attach failed (see console).', true);
+        btn.disabled = false; btn.textContent = 'Attach to Deal';
+    }
+}
+
+function notifyResize() { if (window.BX24) BX24.fitWindow(); }
+</script>
+</body>
+</html>

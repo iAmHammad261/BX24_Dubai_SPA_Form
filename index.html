@@ -57,28 +57,28 @@ function activate() {
 
     BX24.init(function() {
         log("BX24 ready. Binding tab placement...");
-        const handlerUrl = window.location.origin + '/spa_form.html';
+        const handlerUrl = window.location.origin + '/spaform.html';
 
         BX24.callMethod('placement.bind', {
             PLACEMENT:   'CRM_DEAL_DETAIL_TAB',
             HANDLER:     handlerUrl,
             TITLE:       'Dubai SPA Form',
-            DESCRIPTION: 'Generate the South Lofts Dubai SPA document'
+            DESCRIPTION: 'Generate the South Lofts Sale & Purchase Agreement'
         }, function(result) {
             if (result.error()) {
                 const err = result.error().toString();
                 const lc  = err.toLowerCase();
                 if (lc.indexOf('already') !== -1 || lc.indexOf('binded') !== -1) {
-                    log("<span style='color:#2e7d32;font-weight:bold'>✓ Tab already active — completing install…</span>");
+                    log("<span style='color:#2e7d32;font-weight:bold'>\u2713 Tab already active \u2014 completing install\u2026</span>");
                     finishInstall();
                 } else {
-                    log("<span style='color:#c62828;font-weight:bold'>✗ Error: " + err + "</span>");
+                    log("<span style='color:#c62828;font-weight:bold'>\u2717 Error: " + err + "</span>");
                     log("Ensure <b>placement</b> scope is added to this Local App.");
                     btn.disabled = false;
                     btn.textContent = 'Retry';
                 }
             } else {
-                log("<span style='color:#2e7d32;font-weight:bold'>✓ Dubai SPA Form tab registered!</span>");
+                log("<span style='color:#2e7d32;font-weight:bold'>\u2713 Dubai SPA Form tab registered!</span>");
                 finishInstall();
             }
         });
@@ -87,7 +87,7 @@ function activate() {
 
 function finishInstall() {
     try { if (BX24.installFinish) BX24.installFinish(); } catch (e) {}
-    log("Open any Deal → <b>Dubai SPA Form</b> tab. You can close this window.");
+    log("Open any Deal \u2192 <b>Dubai SPA Form</b> tab. You can close this window.");
 }
 
 BX24.init(function() {
