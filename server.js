@@ -12,16 +12,11 @@ app.all('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// The Booking Form tab rendered inside the Deal
-app.all('/bookingform.html', (req, res) => {
-    res.sendFile(path.join(__dirname, 'bookingform.html'));
-});
-
 // The SPA Form tab rendered inside the Deal
-app.all('/spaform.html', (req, res) => {
-    res.sendFile(path.join(__dirname, 'spaform.html'));
+app.all('/spa_form.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'spa_form.html'));
 });
 
 app.listen(PORT, () => {
-    console.log(`Dubai Forms server running on port ${PORT}`);
+    console.log(`Dubai SPA Form server running on port ${PORT}`);
 });

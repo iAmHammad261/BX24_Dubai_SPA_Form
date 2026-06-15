@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dubai Forms — Setup</title>
+    <title>Dubai SPA Form — Setup</title>
     <script src="https://api.bitrix24.com/api/v1/"></script>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -15,20 +15,17 @@
         .setup-card {
             background: #fff; padding: 30px; border-radius: 8px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-            max-width: 520px; width: 100%; text-align: center;
+            max-width: 480px; width: 100%; text-align: center;
         }
         h2 { color: #3d5a4f; font-size: 18px; margin-bottom: 12px; }
-        p { color: #7f8c8d; line-height: 1.5; margin-bottom: 24px; text-align: left; }
+        p { color: #7f8c8d; line-height: 1.5; margin-bottom: 24px; }
         .btn {
             background: #3d5a4f; color: #fff; padding: 12px 24px;
             border: none; border-radius: 4px; font-weight: 700;
             cursor: pointer; font-size: 14px; width: 100%; transition: background 0.15s;
-            margin-bottom: 10px;
         }
         .btn:hover { background: #2f4940; }
         .btn:disabled { background: #9bb0a7; cursor: not-allowed; }
-        .btn-secondary { background: #2fa36b; }
-        .btn-secondary:hover { background: #268a5a; }
         .status-log {
             margin-top: 15px; font-size: 12px; color: #7f8c8d;
             text-align: left; background: #f8fafc; padding: 10px;
@@ -38,99 +35,63 @@
 </head>
 <body>
 <div class="setup-card">
-    <h2>Dubai Forms — Setup</h2>
-    <p>Registers CRM Deal tabs for <strong>Dubai Booking Form</strong> and <strong>Dubai SPA Form</strong>.</p>
-    <button class="btn" id="activateAllBtn" onclick="activateAll()">Activate All Tabs</button>
-    <button class="btn btn-secondary" id="activateSpaBtn" onclick="activateSpaOnly()">Activate Dubai SPA Form Only</button>
+    <h2>Dubai SPA Form — Setup</h2>
+    <p>Registers the <strong>Dubai SPA Form</strong> tab inside your CRM Deal view.</p>
+    <button class="btn" id="activateBtn" onclick="activate()">Activate Dubai SPA Form Tab</button>
     <div class="status-log" id="statusLog"></div>
 </div>
 
 <script>
-const TABS = [
-    {
-        handler: '/bookingform.html',
-        title: 'Dubai Booking Form',
-        description: 'Generate the South Lofts Dubai booking form'
-    },
-    {
-        handler: '/spaform.html',
-        title: 'Dubai SPA Form',
-        description: 'Generate the South Lofts Dubai Sales and Purchase Agreement'
-    }
-];
-
 function log(msg) {
     const box = document.getElementById('statusLog');
     box.style.display = 'block';
     box.innerHTML += msg + '<br>';
 }
 
-function bindTab(tab) {
-    return new Promise(function(resolve) {
-        const handlerUrl = window.location.origin + tab.handler;
+function activate() {
+    const btn = document.getElementById('activateBtn');
+    btn.disabled = true;
+    btn.textContent = 'Registering...';
+    document.getElementById('statusLog').innerHTML = '';
+    log("Initialising BX24 context...");
+
+    BX24.init(function() {
+        log("BX24 ready. Binding tab placement...");
+        const handlerUrl = window.location.origin + '/spa_form.html';
+
         BX24.callMethod('placement.bind', {
             PLACEMENT:   'CRM_DEAL_DETAIL_TAB',
             HANDLER:     handlerUrl,
-            TITLE:       tab.title,
-            DESCRIPTION: tab.description
+            TITLE:       'Dubai SPA Form',
+            DESCRIPTION: 'Generate the South Lofts Dubai SPA document'
         }, function(result) {
             if (result.error()) {
                 const err = result.error().toString();
-                const lc = err.toLowerCase();
+                const lc  = err.toLowerCase();
                 if (lc.indexOf('already') !== -1 || lc.indexOf('binded') !== -1) {
-                    log("<span style='color:#2e7d32;font-weight:bold'>\u2713 " + tab.title + " — already active</span>");
-                    resolve(true);
+                    log("<span style='color:#2e7d32;font-weight:bold'>✓ Tab already active — completing install…</span>");
+                    finishInstall();
                 } else {
-                    log("<span style='color:#c62828;font-weight:bold'>\u2717 " + tab.title + ": " + err + "</span>");
-                    resolve(false);
+                    log("<span style='color:#c62828;font-weight:bold'>✗ Error: " + err + "</span>");
+                    log("Ensure <b>placement</b> scope is added to this Local App.");
+                    btn.disabled = false;
+                    btn.textContent = 'Retry';
                 }
             } else {
-                log("<span style='color:#2e7d32;font-weight:bold'>\u2713 " + tab.title + " registered!</span>");
-                resolve(true);
+                log("<span style='color:#2e7d32;font-weight:bold'>✓ Dubai SPA Form tab registered!</span>");
+                finishInstall();
             }
-        });
-    });
-}
-
-async function activateTabs(tabs) {
-    document.getElementById('statusLog').innerHTML = '';
-    log('Initialising BX24 context...');
-    for (let i = 0; i < tabs.length; i++) {
-        log('Binding <b>' + tabs[i].title + '</b>…');
-        await bindTab(tabs[i]);
-    }
-    finishInstall();
-}
-
-function activateAll() {
-    document.getElementById('activateAllBtn').disabled = true;
-    document.getElementById('activateSpaBtn').disabled = true;
-    BX24.init(function() {
-        activateTabs(TABS).then(function() {
-            document.getElementById('activateAllBtn').disabled = false;
-            document.getElementById('activateSpaBtn').disabled = false;
-        });
-    });
-}
-
-function activateSpaOnly() {
-    document.getElementById('activateAllBtn').disabled = true;
-    document.getElementById('activateSpaBtn').disabled = true;
-    BX24.init(function() {
-        activateTabs([TABS[1]]).then(function() {
-            document.getElementById('activateAllBtn').disabled = false;
-            document.getElementById('activateSpaBtn').disabled = false;
         });
     });
 }
 
 function finishInstall() {
     try { if (BX24.installFinish) BX24.installFinish(); } catch (e) {}
-    log('Open any Deal → <b>Dubai SPA Form</b> or <b>Dubai Booking Form</b> tab.');
+    log("Open any Deal → <b>Dubai SPA Form</b> tab. You can close this window.");
 }
 
 BX24.init(function() {
-    if (BX24.isInstallMode && BX24.isInstallMode()) activateAll();
+    if (BX24.isInstallMode && BX24.isInstallMode()) activate();
 });
 </script>
 </body>

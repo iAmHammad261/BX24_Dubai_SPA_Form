@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dubai SPA Form</title>
+<script src="https://api.bitrix24.com/api/v1/"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, Helvetica, sans-serif; font-size: 11px; color: #1a1a1a; background: #e9edec; }
+
+    /* Action bar */
+    .action-bar {
+        position: sticky; top: 0; z-index: 50; background: #fff;
+        border-bottom: 1px solid #e2e8f0; padding: 10px 16px;
+        display: flex; align-items: center; justify-content: space-between;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+    }
+    .action-bar .status { font-size: 12px; color: #6b7785; }
+    .btn-attach {
+        background: #2fa36b; color: #fff; border: none; border-radius: 4px;
+        padding: 10px 22px; font-size: 13px; font-weight: 700; cursor: pointer; transition: background .15s;
+    }
+    .btn-attach:hover { background: #268a5a; }
+    .btn-attach:disabled { background: #a7cfbb; cursor: not-allowed; }
+
+    /* Form sheet */
+    .sheet-wrap { padding: 16px; display: flex; justify-content: center; }
+    #formRoot {
+        background: #fff; width: 800px; max-width: 100%;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+        padding: 40px;
+    }
+
+    /* Bilingual Table Styles */
+    .bilingual-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+    .bilingual-table th, .bilingual-table td { border: 1px solid #333; padding: 8px; vertical-align: top; }
+    .en-col { text-align: left; width: 40%; }
+    .data-col { text-align: center; width: 20%; font-weight: bold; background: #f9f9f9; }
+    .ar-col { text-align: right; width: 40%; direction: rtl; }
+    
+    .clause-block { margin-bottom: 15px; text-align: justify; line-height: 1.5; }
+    .clause-title { font-weight: bold; margin-bottom: 5px; }
+    .page-break { page-break-before: always; }
+    .avoid-break { page-break-inside: avoid; }
+    .signature-block { display: flex; justify-content: space-between; margin-top: 40px; }
+    .signature-line { border-top: 1px solid #000; width: 40%; text-align: center; padding-top: 5px; }
+
+    /* Payment Plan Specific Styles (from Booking Form) */
+    .ip-summary { margin: 6px 0 10px; }
+    .ip-summary .row { font-size: 11.5px; margin-bottom: 5px; }
+    .ip-summary .row b { font-weight: 700; }
+
+    table.ip-table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+    table.ip-table th, table.ip-table td {
+        border: 1px solid #444; padding: 5px 8px; font-size: 10.5px; text-align: left;
+    }
+    table.ip-table th { font-weight: 700; background: #f3f5f4; text-align: center; }
+    table.ip-table td.c { text-align: center; }
+    table.ip-table td.r { text-align: right; }
+    table.ip-table tr.total td { font-weight: 800; background: #f3f5f4; }
+    table.ip-table tr.balloon-row td { font-style: italic; background: #f7faf8; }
+</style>
+</head>
+<body>
+
+<div class="action-bar">
+    <span class="status" id="status">Loading deal data…</span>
+    <button class="btn-attach" id="attachBtn" onclick="attachToDeal()" disabled>Attach SPA to Deal</button>
+</div>
+
+<div class="sheet-wrap">
+    <div id="formRoot"></div>
+</div>
+
+<script>
+/* ════════════════ CONFIG & MAPPING ════════════════ */
+const SPA_FILE_FIELD = 'UF_CRM_1781467358140'; 
+
+// Payment Plan config from Booking form
+const JSON_FIELD  = 'UF_CRM_1781355927497';
+const ADMIN_FEE   = 5250;   
+const DLD_RATE    = 0.04;   
+const HANDOVER_MONTHS = 24;
+
+// Deal Fields
+const F_PARKING_NO = 'UF_CRM_1781467165113';
+const F_PAYMENT_MODE = 'UF_CRM_1781467248957';
+const F_BANK = 'UF_CRM_1781467271543';
+const F_COMPLETION_DATE = 'UF_CRM_1781467301674';
+const F_WITNESS_NAME = 'UF_CRM_1781467320678';
+
+// Contact Fields
+const C_ADDRESS = 'UF_CRM_1767353184396';
+const C_POBOX = 'UF_CRM_1781458421648';
+const C_CITY = 'UF_CRM_1781458367322';
+const C_PHONE = 'UF_CRM_1767691716'; 
+const C_COUNTRY = 'UF_CRM_1781458379196';
+const C_NATIONALITY = 'UF_CRM_1767691283';
+const C_PASSPORT = 'UF_CRM_1766983512371';
+const C_EXP_DATE = 'UF_CRM_1781467043973';
+const C_NOM_NAME = 'UF_CRM_1781467071988';
+const C_NOM_NAT = 'UF_CRM_1781467099554';
+const C_NOM_PASS = 'UF_CRM_1781467123055';
+const C_NOM_EXP = 'UF_CRM_1781467149267';
+
+// Product/Catalog Fields
+const PROD_TYPE = 177;
+const PROD_AREA = 259;
+
+const PROJECT_NAME = 'South Lofts by Premier Choice';
+
+/* ════════════════ INSTALLMENT SCHEDULES ════════════════ */
+const SCHEDULES = {
+    '60_40': [
+        { label: 'Downpayment',     pct: 20, when: { type: 'booking', months: 0 } },
+        { label: '1st Installment', pct: 5,  when: { type: 'booking', months: 3 } },
+        { label: '2nd Installment', pct: 5,  when: { type: 'booking', months: 6 } },
+        { label: '3rd Installment', pct: 5,  when: { type: 'booking', months: 9 } },
+        { label: '4th Installment', pct: 10, when: { type: 'booking', months: 12 } },
+        { label: '5th Installment', pct: 5,  when: { type: 'booking', months: 15 } },
+        { label: '6th Installment', pct: 5,  when: { type: 'booking', months: 18 } },
+        { label: '7th Installment', pct: 5,  when: { type: 'booking', months: 21 } },
+        { label: 'Completion',      pct: 40, when: { type: 'completion' } }
+    ],
+    '3_years': [
+        { label: 'Downpayment',      pct: 20, when: { type: 'booking', months: 0 } },
+        { label: '1st Installment',  pct: 5,  when: { type: 'booking', months: 5 } },
+        { label: '2nd Installment',  pct: 5,  when: { type: 'booking', months: 9 } },
+        { label: '3rd Installment',  pct: 10, when: { type: 'booking', months: 13 } },
+        { label: '4th Installment',  pct: 5,  when: { type: 'booking', months: 17 } },
+        { label: '5th Installment',  pct: 5,  when: { type: 'booking', months: 21 } },
+        { label: '6th Installment',  pct: 10, when: { type: 'completion' } },
+        { label: '7th Installment',  pct: 3,  when: { type: 'handover', months: 3 } },
+        { label: '8th Installment',  pct: 3,  when: { type: 'handover', months: 6 } },
+        { label: '9th Installment',  pct: 3,  when: { type: 'handover', months: 9 } },
+        { label: '10th Installment', pct: 5,  when: { type: 'handover', months: 12 } },
+        { label: '11th Installment', pct: 3,  when: { type: 'handover', months: 16 } },
+        { label: '12th Installment', pct: 3,  when: { type: 'handover', months: 18 } },
+        { label: '13th Installment', pct: 3,  when: { type: 'handover', months: 21 } },
+        { label: '14th Installment', pct: 5,  when: { type: 'handover', months: 24 } },
+        { label: '15th Installment', pct: 3,  when: { type: 'handover', months: 27 } },
+        { label: '16th Installment', pct: 3,  when: { type: 'handover', months: 30 } },
+        { label: '17th Installment', pct: 3,  when: { type: 'handover', months: 33 } },
+        { label: '18th Installment', pct: 3,  when: { type: 'handover', months: 36 } }
+    ],
+    '5_years': [
+        { label: 'Downpayment',      pct: 20, when: { type: 'booking', months: 0 } },
+        { label: '1st Installment',  pct: 5,  when: { type: 'booking', months: 5 } },
+        { label: '2nd Installment',  pct: 5,  when: { type: 'booking', months: 9 } },
+        { label: '3rd Installment',  pct: 10, when: { type: 'booking', months: 13 } },
+        { label: '4th Installment',  pct: 5,  when: { type: 'booking', months: 17 } },
+        { label: '5th Installment',  pct: 5,  when: { type: 'booking', months: 21 } },
+        { label: '6th Installment',  pct: 10, when: { type: 'completion' } },
+        { label: '7th Installment',  pct: 4,  when: { type: 'handover', months: 6 } },
+        { label: '8th Installment',  pct: 4,  when: { type: 'handover', months: 12 } },
+        { label: '9th Installment',  pct: 4,  when: { type: 'handover', months: 18 } },
+        { label: '10th Installment', pct: 4,  when: { type: 'handover', months: 24 } },
+        { label: '11th Installment', pct: 4,  when: { type: 'handover', months: 30 } },
+        { label: '12th Installment', pct: 4,  when: { type: 'handover', months: 36 } },
+        { label: '13th Installment', pct: 4,  when: { type: 'handover', months: 42 } },
+        { label: '14th Installment', pct: 4,  when: { type: 'handover', months: 48 } },
+        { label: '15th Installment', pct: 4,  when: { type: 'handover', months: 54 } },
+        { label: '16th Installment', pct: 4,  when: { type: 'handover', months: 60 } }
+    ]
+};
+
+/* ════════════════ HELPERS ════════════════ */
+let currentDealId = null;
+
+function callBX(method, params) {
+    return new Promise((resolve, reject) => {
+        BX24.callMethod(method, params, res => {
+            if (res.error()) reject(res.error()); else resolve(res.data());
+        });
+    });
+}
+
+function esc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function val(v) { return (v === undefined || v === null || v === '') ? '—' : v; }
+function getUF(obj, code) { let v = obj[code]; if (Array.isArray(v)) v = v[0]; if (v && typeof v === 'object') v = (v.value !== undefined ? v.value : v.VALUE); return (v === undefined || v === null) ? '' : v; }
+function getProp(product, id) { if (!product) return ''; const keys = ['property' + id, 'property_' + id, 'PROPERTY_' + id, String(id)]; for (let key of keys) { let v = product[key]; if (v == null) continue; if (Array.isArray(v)) v = v[0]; if (typeof v === 'object') return v.valueEnum || v.value || v.VALUE; return v; } return ''; }
+function pad(n) { return n < 10 ? '0' + n : '' + n; }
+function fmtDate(d) { return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear(); }
+function addMonths(date, m) { const d = new Date(date.getTime()); const day = d.getDate(); d.setMonth(d.getMonth() + m); if (d.getDate() < day) d.setDate(0); return d; }
+function ordinal(n) { const s = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
+function round2(n) { return Math.round(n * 100) / 100; }
+function toNumber(raw) { if (raw == null) return 0; const n = parseFloat(String(raw).replace(/[^0-9.\-]/g, '')); return isNaN(n) ? 0 : n; }
+function money(n) { return 'AED ' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+function numberToWords(num) {
+    if (num === 0) return "Zero";
+    const a = ['','One ','Two ','Three ','Four ', 'Five ','Six ','Seven ','Eight ','Nine ','Ten ','Eleven ','Twelve ','Thirteen ','Fourteen ','Fifteen ','Sixteen ','Seventeen ','Eighteen ','Nineteen '];
+    const b = ['', '', 'Twenty','Thirty','Forty','Fifty', 'Sixty','Seventy','Eighty','Ninety'];
+    
+    if ((num = num.toString()).length > 9) return 'overflow';
+    let n = ('000000000' + num).substr(-9).match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/);
+    if (!n) return; let str = '';
+    str += (n[1] != 0) ? (a[Number(n[1])] || b[n[1][0]] + ' ' + a[n[1][1]]) + 'Crore ' : '';
+    str += (n[2] != 0) ? (a[Number(n[2])] || b[n[2][0]] + ' ' + a[n[2][1]]) + 'Lakh ' : '';
+    str += (n[3] != 0) ? (a[Number(n[3])] || b[n[3][0]] + ' ' + a[n[3][1]]) + 'Thousand ' : '';
+    str += (n[4] != 0) ? (a[Number(n[4])] || b[n[4][0]] + ' ' + a[n[4][1]]) + 'Hundred ' : '';
+    str += (n[5] != 0) ? ((str != '') ? 'and ' : '') + (a[Number(n[5])] || b[n[5][0]] + ' ' + a[n[5][1]]) : '';
+    return str.trim() + ' Dirhams Only';
+}
+
+/* ════════════════ SCHEDULE LOGIC ════════════════ */
+function parseInstNo(label) { const m = String(label).match(/^(\d+)(st|nd|rd|th)\s+Installment/i); return m ? parseInt(m[1], 10) : null; }
+
+function baseSchedule(plan, pj, booking, netPayable) {
+    const completion = addMonths(booking, HANDOVER_MONTHS);
+    function dateFor(when) {
+        if (when.type === 'booking') return addMonths(booking, when.months);
+        if (when.type === 'completion') return completion;
+        if (when.type === 'handover') return addMonths(completion, when.months);
+        return booking;
+    }
+    if (SCHEDULES[plan]) {
+        return SCHEDULES[plan].map(it => {
+            const isCompletion = it.when.type === 'completion';
+            const d = dateFor(it.when);
+            return { label: it.label, pct: it.pct, amount: round2(netPayable * it.pct / 100), dateStr: fmtDate(d), ts: d.getTime(), locked: (it.label === 'Downpayment' || isCompletion), instNo: parseInstNo(it.label) };
+        });
+    }
+    if (plan === 'full_payment') {
+        const d = pj.paymentDate ? new Date(pj.paymentDate) : booking;
+        const ok = !isNaN(d.getTime());
+        return [{ label: 'Full Payment', pct: 100, amount: netPayable, dateStr: ok ? fmtDate(d) : fmtDate(booking), ts: ok ? d.getTime() : booking.getTime(), locked: true, instNo: null }];
+    }
+    if (plan === 'custom') return buildCustomSchedule(pj, netPayable);
+    return [];
+}
+
+function buildCustomSchedule(pj, net) {
+    const dp = toNumber(pj.downpaymentPct), pos = toNumber(pj.possessionPct), n = Math.max(0, parseInt(pj.paymentPlanUnits, 10) || 0);
+    const freqMonths = ({ monthly: 1, quarterly: 3, biannually: 6, annually: 12 })[pj.innerPaymentPlan] || 1;
+    const dpDate = pj.downpaymentDate ? new Date(pj.downpaymentDate) : new Date();
+    const posDate = pj.possessionDate ? new Date(pj.possessionDate) : null;
+    const rows = [{ label: 'Downpayment', pct: round2(dp), amount: round2(net * dp / 100), dateStr: fmtDate(dpDate), ts: dpDate.getTime(), locked: true, instNo: null }];
+    const instPctTotal = Math.max(0, 100 - dp - pos), each = n > 0 ? instPctTotal / n : 0;
+    for (let i = 1; i <= n; i++) {
+        const d = addMonths(dpDate, i * freqMonths);
+        rows.push({ label: ordinal(i) + ' Installment', pct: round2(each), amount: round2(net * each / 100), dateStr: fmtDate(d), ts: d.getTime(), locked: false, instNo: i });
+    }
+    rows.push({ label: 'On Possession', pct: round2(pos), amount: round2(net * pos / 100), dateStr: posDate ? fmtDate(posDate) : '—', ts: posDate ? posDate.getTime() : Number.MAX_SAFE_INTEGER, locked: true, instNo: null });
+    return rows;
+}
+
+function applyBalloons(rows, pj) {
+    const balloons = (Array.isArray(pj.balloonPayments) ? pj.balloonPayments : []).map(b => ({ position: parseInt(b.position, 10), amount: toNumber(b.amount) })).filter(b => b.amount > 0);
+    if (!balloons.length) return rows;
+    const poolBase = rows.reduce((a, r) => a + (r.locked ? 0 : r.amount), 0), balloonTotal = balloons.reduce((a, b) => a + b.amount, 0);
+    if (poolBase > 0) {
+        const scale = Math.max(0, poolBase - balloonTotal) / poolBase;
+        rows.forEach(r => { if (!r.locked) r.amount = round2(r.amount * scale); });
+    }
+    function brow(b, dateStr, ts) { return { label: 'Balloon Payment', pct: '', amount: round2(b.amount), dateStr: dateStr, ts: ts, locked: true, instNo: null, balloon: true }; }
+    const matched = {}, out = []; let lastInstDate = '', lastInstTs = null;
+    rows.forEach(r => { if (r.instNo != null) matched[r.instNo] = true; });
+    rows.forEach(r => {
+        out.push(r);
+        if (r.instNo != null) {
+            lastInstDate = r.dateStr; lastInstTs = r.ts;
+            balloons.filter(b => b.position === r.instNo).forEach(b => out.push(brow(b, r.dateStr, (r.ts || 0) + 1)));
+        }
+    });
+    balloons.filter(b => !matched[b.position]).forEach(b => {
+        let idx = -1; out.forEach((r, i) => { if (r.instNo != null) idx = i; });
+        out.splice(idx >= 0 ? idx + 1 : out.length, 0, brow(b, lastInstDate, (lastInstTs || 0) + 1));
+    });
+    return out;
+}
+
+function buildSchedule(plan, pj, booking, net) {
+    return applyBalloons(baseSchedule(plan, pj, booking, net), pj)
+        .map((r, i) => { r._i = i; return r; })
+        .sort((a, b) => {
+            const ta = (a.ts == null ? Number.MAX_SAFE_INTEGER : a.ts), tb = (b.ts == null ? Number.MAX_SAFE_INTEGER : b.ts);
+            return (ta - tb) || (a._i - b._i);
+        });
+}
+
+function scheduleHtml(d) {
+    let rows = '';
+    if (!d.schedule.length) {
+        rows = '<tr><td colspan="4" class="c">Installment schedule for this plan is not configured yet.</td></tr>';
+    } else {
+        d.schedule.forEach(r => {
+            const pctCell = (r.pct === '' || r.pct == null) ? '' : (r.pct + '%');
+            const cls = r.balloon ? ' class="balloon-row"' : '';
+            rows += `<tr${cls}><td>${esc(r.label)}</td><td class="c">${pctCell}</td><td class="r">${money(r.amount)}</td><td class="c">${esc(r.dateStr)}</td></tr>`;
+        });
+        rows += `<tr class="total"><td>Total</td><td class="c">100%</td><td class="r">${money(d.netPayable)}</td><td></td></tr>`;
+    }
+    return `
+    <div class="ip-summary">
+        <div class="row"><b>Discount Percentage (نسبة الخصم):</b> ${d.discPct || 0}%</div>
+        <div class="row"><b>Discount Value (قيمة الخصم):</b> ${money(d.discValue)}</div>
+        <div class="row"><b>Net Payable Amount (صافي المبلغ المستحق):</b> ${money(d.netPayable)}</div>
+        <div class="row"><b>DLD Fee (رسوم دائرة الأراضي والأملاك):</b> ${money(d.dldFee)}</div>
+        <div class="row"><b>Admin Fee (رسوم إدارية):</b> ${money(d.adminFee)}</div>
+    </div>
+    <table class="ip-table avoid-break">
+        <thead>
+            <tr>
+                <th>Installment<br>(القسط)</th>
+                <th>% of Purchase Price<br>(نسبة الشراء)</th>
+                <th>Amount (AED)<br>(المبلغ)</th>
+                <th>Payment Dates<br>(تاريخ الدفع)</th>
+            </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+    </table>`;
+}
+
+/* ════════════════ LOAD & RENDER ════════════════ */
+function setStatus(msg, err) {
+    const el = document.getElementById('status');
+    el.textContent = msg;
+    el.style.color = err ? '#c62828' : '#6b7785';
+}
+
+BX24.init(() => {
+    const info = BX24.placement.info();
+    currentDealId = info && info.options ? info.options.ID : null;
+    if (!currentDealId) { setStatus('Open this from inside a Deal.', true); return; }
+    loadAll().catch(e => {
+        console.error('[SPA Form] load error:', e);
+        setStatus('Could not load deal data (see console).', true);
+    });
+});
+
+async function loadAll() {
+    setStatus('Loading deal…');
+
+    // Deal
+    const dealRes = await callBX('crm.deal.get', { id: currentDealId });
+    const deal = dealRes.result || dealRes;
+
+    // Payment JSON
+    let pj = {};
+    try { pj = JSON.parse(deal[JSON_FIELD] || '{}'); } catch (e) { pj = {}; }
+    const plan = pj.paymentPlan || '';
+
+    // Primary Contact (Buyer)
+    const contactsRes = await callBX('crm.deal.contact.items.get', { id: currentDealId });
+    const contactItems = contactsRes.result || contactsRes || [];
+    let buyer = {};
+    if (contactItems.length > 0) {
+        const cRes = await callBX('crm.contact.get', { id: contactItems[0].CONTACT_ID });
+        buyer = cRes.result || cRes;
+    }
+
+    // Product/Unit
+    const rowsData = await callBX('crm.deal.productrows.get', { id: currentDealId });
+    const rows = rowsData.result || rowsData || [];
+    let product = null; let unitNo = '';
+    if (rows.length > 0) {
+        unitNo = rows[0].PRODUCT_NAME || '';
+        const pd = await callBX('catalog.product.get', { id: rows[0].PRODUCT_ID });
+        product = pd.product || pd;
+    }
+
+    // Calculations
+    const today = new Date();
+    const discPct = toNumber(pj.discountPct);
+    const netPayable = toNumber(deal.OPPORTUNITY);
+    const purchasePrice = (discPct > 0 && discPct < 100) ? round2(netPayable / (1 - discPct / 100)) : netPayable;
+    const discValue = round2(purchasePrice - netPayable);
+    const dldFee = purchasePrice * DLD_RATE;
+    const schedule = buildSchedule(plan, pj, today, netPayable);
+
+    // Assemble Data
+    const data = {
+        dateStr: today.toLocaleDateString('en-GB'),
+        buyerName: [buyer.NAME, buyer.LAST_NAME].filter(Boolean).join(' '),
+        address: getUF(buyer, C_ADDRESS),
+        pobox: getUF(buyer, C_POBOX),
+        city: getUF(buyer, C_CITY),
+        phone: getUF(buyer, C_PHONE) || (buyer.PHONE && buyer.PHONE[0] ? buyer.PHONE[0].VALUE : ''),
+        email: buyer.EMAIL && buyer.EMAIL[0] ? buyer.EMAIL[0].VALUE : '',
+        country: getUF(buyer, C_COUNTRY),
+        nationality: getUF(buyer, C_NATIONALITY),
+        passport: getUF(buyer, C_PASSPORT),
+        expDate: getUF(buyer, C_EXP_DATE),
+        nomineeName: getUF(buyer, C_NOM_NAME),
+        nomineeNat: getUF(buyer, C_NOM_NAT),
+        nomineePass: getUF(buyer, C_NOM_PASS),
+        nomineeExp: getUF(buyer, C_NOM_EXP),
+        
+        unitNo: unitNo,
+        parkingNo: getUF(deal, F_PARKING_NO),
+        area: getProp(product, PROD_AREA),
+        unitType: getProp(product, PROD_TYPE),
+        
+        netPayable: netPayable,
+        discPct: discPct,
+        discValue: discValue,
+        dldFee: dldFee,
+        adminFee: ADMIN_FEE,
+        schedule: schedule,
+
+        paymentMode: getUF(deal, F_PAYMENT_MODE),
+        bank: getUF(deal, F_BANK),
+        completionDate: getUF(deal, F_COMPLETION_DATE),
+        witnessName: getUF(deal, F_WITNESS_NAME)
+    };
+
+    renderForm(data);
+    document.getElementById('attachBtn').disabled = false;
+    setStatus('Ready — review, then Attach SPA to Deal.');
+}
+
+/* ════════════════ RENDER ════════════════ */
+function renderForm(d) {
+    const totalWords = numberToWords(Math.floor(d.netPayable));
+
+    const html = `
+      <div style="text-align:center; margin-bottom: 20px;">
+        <h2>SALES & PURCHASE AGREEMENT</h2>
+        <h3>PROJECT NAME: ${PROJECT_NAME}</h3>
+      </div>
+
+      <table class="bilingual-table">
+        <tr>
+            <td class="en-col">Date</td>
+            <td class="data-col">${esc(d.dateStr)}</td>
+            <td class="ar-col">التاريخ</td>
+        </tr>
+      </table>
+
+      <table class="bilingual-table">
+        <tr><th colspan="3" style="text-align:center; background:#eee;">2. APPLICANT DETAILS / تفاصيل الطلب</th></tr>
+        <tr><td class="en-col">Buyer Name</td><td class="data-col">${esc(val(d.buyerName))}</td><td class="ar-col">اسم المشتري</td></tr>
+        <tr><td class="en-col">Address</td><td class="data-col">${esc(val(d.address))}</td><td class="ar-col">العنوان</td></tr>
+        <tr><td class="en-col">P.O. Box</td><td class="data-col">${esc(val(d.pobox))}</td><td class="ar-col">رقم صندوق البريد</td></tr>
+        <tr><td class="en-col">City</td><td class="data-col">${esc(val(d.city))}</td><td class="ar-col">مدينة</td></tr>
+        <tr><td class="en-col">Phone/Mobile</td><td class="data-col">${esc(val(d.phone))}</td><td class="ar-col">الهاتف</td></tr>
+        <tr><td class="en-col">Email</td><td class="data-col">${esc(val(d.email))}</td><td class="ar-col">الايميل</td></tr>
+        <tr><td class="en-col">Country</td><td class="data-col">${esc(val(d.country))}</td><td class="ar-col">البلد</td></tr>
+        <tr><td class="en-col">Nationality</td><td class="data-col">${esc(val(d.nationality))}</td><td class="ar-col">الجنسية</td></tr>
+        <tr><td class="en-col">Passport No.</td><td class="data-col">${esc(val(d.passport))}</td><td class="ar-col">رقم جواز السفر</td></tr>
+        <tr><td class="en-col">Exp. Date</td><td class="data-col">${esc(val(d.expDate))}</td><td class="ar-col">تاريخ الانتهاء</td></tr>
+        <tr><td class="en-col">Nominee Name</td><td class="data-col">${esc(val(d.nomineeName))}</td><td class="ar-col">اسم الوكيل</td></tr>
+        <tr><td class="en-col">Nominee Nationality</td><td class="data-col">${esc(val(d.nomineeNat))}</td><td class="ar-col">الجنسية</td></tr>
+        <tr><td class="en-col">Nominee Passport No.</td><td class="data-col">${esc(val(d.nomineePass))}</td><td class="ar-col">رقم جواز السفر</td></tr>
+        <tr><td class="en-col">Nominee Exp. Date</td><td class="data-col">${esc(val(d.nomineeExp))}</td><td class="ar-col">تاريخ الانتهاء</td></tr>
+      </table>
+
+      <table class="bilingual-table avoid-break">
+        <tr><th colspan="3" style="text-align:center; background:#eee;">3. PURCHASE DETAILS / تفاصيل الشراء</th></tr>
+        <tr><td class="en-col">Building / Project</td><td class="data-col">${esc(PROJECT_NAME)}</td><td class="ar-col">المبنى</td></tr>
+        <tr><td class="en-col">Unit No.</td><td class="data-col">${esc(val(d.unitNo))}</td><td class="ar-col">رقم الوحدة</td></tr>
+        <tr><td class="en-col">Parking No.</td><td class="data-col">${esc(val(d.parkingNo))}</td><td class="ar-col">رقم موقف السيارات</td></tr>
+        <tr><td class="en-col">Area (Sq. m.)</td><td class="data-col">${esc(val(d.area))}</td><td class="ar-col">المساحة</td></tr>
+        <tr><td class="en-col">Unit Type</td><td class="data-col">${esc(val(d.unitType))}</td><td class="ar-col">نوع الوحدة</td></tr>
+      </table>
+
+      <table class="bilingual-table avoid-break">
+        <tr><th colspan="3" style="text-align:center; background:#eee;">4. TOTAL PURCHASE PRICE / أجمالي سعر الشراء</th></tr>
+        <tr><td class="en-col">Total (AED)</td><td class="data-col">${Number(d.netPayable).toLocaleString()}</td><td class="ar-col">الإجمالي</td></tr>
+        <tr><td class="en-col">In Words</td><td class="data-col" colspan="2" style="text-align:left;">${totalWords}</td></tr>
+      </table>
+
+      <table class="bilingual-table avoid-break">
+        <tr><th colspan="3" style="text-align:center; background:#eee;">5. DOWN PAYMENT DETAILS / تفاصيل الدفعة المقدمة</th></tr>
+        <tr><td class="en-col">Payment Mode</td><td class="data-col">${esc(val(d.paymentMode))}</td><td class="ar-col">طريقة الدفع</td></tr>
+        <tr><td class="en-col">Amount</td><td class="data-col">${d.schedule.length ? money(d.schedule[0].amount) : money(0)}</td><td class="ar-col">المبلغ</td></tr>
+        <tr><td class="en-col">Bank</td><td class="data-col">${esc(val(d.bank))}</td><td class="ar-col">بنك</td></tr>
+      </table>
+
+      <table class="bilingual-table avoid-break">
+        <tr><td class="en-col">7. Anticipated Completion Date</td><td class="data-col">${esc(val(d.completionDate))}</td><td class="ar-col">تاريخ الانتهاء المتوقع</td></tr>
+      </table>
+
+      <div class="page-break"></div>
+      
+      <h3>Specific Clauses</h3>
+      
+      <div class="clause-block avoid-break">
+          <div class="clause-title">7.3.5 Possession</div>
+          <p>"That I, <b>${esc(val(d.buyerName))}</b>, have purchased Unit No. <b>${esc(val(d.unitNo))}</b> from PCI Real Estate Developers LLC (the ‘Developer’) on the payment plan..."</p>
+      </div>
+
+      <div class="clause-block avoid-break">
+          <div class="clause-title">9.1 Variations</div>
+          <p>The Purchaser acknowledges and agrees that the Unit Area is only an approximate and the Purchaser acknowledges that the actual Unit Area may vary from the Unit Area (<b>${esc(val(d.area))} Sq.m</b>).</p>
+      </div>
+
+      <div class="page-break"></div>
+
+      <div style="text-align:center; margin-bottom: 15px;">
+        <h3>SCHEDULE A</h3>
+        <h4>SCHEDULE OF PAYMENT & UNIT PRICE / الجدول الزمنى للمدفوعات</h4>
+      </div>
+      
+      <div style="margin-bottom: 10px;">
+        <p><b>Unit Number:</b> ${esc(val(d.unitNo))}</p>
+        <p><b>Name of Purchaser:</b> ${esc(val(d.buyerName))}</p>
+        <p><b>Total Sale Price (AED):</b> ${Number(d.netPayable).toLocaleString()}</p>
+      </div>
+
+      ${scheduleHtml(d)}
+
+      <div class="page-break"></div>
+      
+      <div class="clause-block">
+          <p>I/WE HAVE READ, UNDERSTOOD AND AGREED TO BE BOUND BY THE TERMS AND CONDITIONS OF THIS AGREEMENT WHICH HAS BEEN EXECUTED IN DUPLICATE EACH OF WHICH SO EXECUTED SHALL BE DEEMED TO BE AN ORIGINAL:</p>
+      </div>
+      
+      <div class="signature-block avoid-break">
+          <div style="width: 45%;">
+              <h4>PURCHASER</h4>
+              <p>Name: <b>${esc(val(d.buyerName))}</b></p>
+              <br><br>
+              <div class="signature-line">Signature</div>
+          </div>
+          <div style="width: 45%;">
+              <h4>SELLER: PCI REAL ESTATE DEVELOPERS LLC</h4>
+              <p>Name: Mr. Muhammad Mahhad Imran</p>
+              <br><br>
+              <div class="signature-line">Signature</div>
+          </div>
+      </div>
+      
+      <div class="signature-block avoid-break" style="margin-top: 60px;">
+          <div style="width: 100%;">
+              <h4>WITNESS</h4>
+              <p>Name: <b>${esc(val(d.witnessName))}</b></p>
+              <br><br>
+              <div class="signature-line" style="width: 20%;">Signature</div>
+          </div>
+      </div>
+
+    `;
+
+    document.getElementById('formRoot').innerHTML = html;
+}
+
+/* ════════════════ ATTACH TO DEAL ════════════════ */
+async function attachToDeal() {
+    const btn = document.getElementById('attachBtn');
+    btn.disabled = true; btn.textContent = 'Generating PDF…';
+    setStatus('Generating PDF…');
+
+    try {
+        const el = document.getElementById('formRoot');
+        const opt = {
+            margin: [10, 10, 15, 10],
+            filename: 'Dubai_SPA_Form_' + currentDealId + '.pdf',
+            image: { type: 'jpeg', quality: 0.95 },
+            html2canvas: { scale: 2, useCORS: true },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+            pagebreak: { mode: ['css', 'legacy'] }
+        };
+
+        const dataUri = await html2pdf().set(opt).from(el).outputPdf('datauristring');
+        const base64 = dataUri.split(',')[1];
+
+        btn.textContent = 'Attaching…';
+        setStatus('Uploading to the deal…');
+
+        const fields = {};
+        fields[SPA_FILE_FIELD] = { fileData: [opt.filename, base64] };
+        await callBX('crm.deal.update', { id: currentDealId, fields: fields });
+
+        setStatus('✓ Attached SPA to the Deal.');
+        btn.textContent = 'Attached ✓';
+        setTimeout(() => { btn.disabled = false; btn.textContent = 'Attach SPA to Deal'; }, 2500);
+    } catch (e) {
+        console.error('[SPA Form] attach error:', e);
+        setStatus('Attach failed (see console).', true);
+        btn.disabled = false; btn.textContent = 'Attach SPA to Deal';
+    }
+}
+</script>
+</body>
+</html>
