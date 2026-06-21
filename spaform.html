@@ -100,6 +100,7 @@ const ADMIN_FEE = 5250;  // AED flat
 const DLD_RATE  = 0.04;  // 4% of purchase price (shown separately)
 const HANDOVER_MONTHS = 24;
 const FURNISHED_FEE = 25000; // AED, shown when Furnished is on (same as Booking Form)
+const PRIVATE_POOL_FEE = 100000; // AED, shown when Private Pool is on (same as Booking Form)
 
 /* ════════════════ INSTALLMENT SCHEDULES (identical to Booking Form) ════════════════ */
 const SCHEDULES = {
@@ -316,6 +317,10 @@ function numToWordsAR(num) {
 
 /* ════════════════ SCHEDULE ENGINE (identical logic to Booking Form) ════════════════ */
 function baseSchedule(plan, pj, booking, net) {
+    if (plan !== 'custom' && pj && pj.downpaymentStartDate) {
+        const dps = new Date(pj.downpaymentStartDate);
+        if (!isNaN(dps.getTime())) booking = dps;   // standard plans anchor to the chosen start date
+    }
     const completion = addMonths(booking, HANDOVER_MONTHS);
     function dateFor(when) {
         if (when.type === 'booking')    return addMonths(booking, when.months);
@@ -605,6 +610,7 @@ function buildContext(deal, contacts, company, product, unitName, pj, plan) {
         net: net, purchasePrice: purchasePrice, discPct: discPct, discValue: discValue,
         dldFee: dldFee, adminFee: ADMIN_FEE, schedule: schedule,
         furnished: (pj.furnished === 'Yes' || pj.furnished === true) ? 'Yes' : 'No',
+        privatePool: (pj.privatePool === 'Yes' || pj.privatePool === true) ? 'Yes' : 'No',
         downpaymentAmt: downpaymentAmt, buyerName: buyerName, bodyAddress: bodyAddress,
         unitName: unitName,
         spsl: 'SPSL-' + String(currentDealId).padStart(4, '0')
@@ -769,6 +775,7 @@ function scheduleAHtml(d) {
             '<div><b>DLD Fee (4% of purchase price, payable separately):</b> ' + money(d.dldFee) + '</div>' +
             '<div><b>Admin Fee (payable separately):</b> ' + money(d.adminFee) + '</div>' +
             '<div><b>Furnished:</b> ' + (d.furnished === 'Yes' ? 'Yes (' + money(FURNISHED_FEE) + ')' : 'No') + '</div>' +
+            '<div><b>Private Pool:</b> ' + (d.privatePool === 'Yes' ? 'Yes (' + money(PRIVATE_POOL_FEE) + ')' : 'No') + '</div>' +
         '</div>' +
         '<table class="schedA"><thead><tr>' +
             '<th>Installments</th><th>Payment Date</th><th>Payment %</th><th>Installment Amount (AED)</th>' +
