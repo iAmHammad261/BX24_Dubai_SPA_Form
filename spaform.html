@@ -40,6 +40,16 @@
   table.schedA td.r { text-align: right; }
   table.schedA tr.total td { font-weight: 800; background: #eef3f0; }
   table.schedA tr.balloon-row td { font-style: italic; background: #f6faf8; }
+
+  /* ── Signatures (separate lines, EN left / AR right) ── */
+  #spaRoot .sig-row { display: flex; justify-content: space-between; align-items: center;
+                      margin: 20px 0; }
+  #spaRoot .sig-en { font-weight: 700; }
+  #spaRoot .sig-ar { direction: rtl; text-align: right; font-weight: 700; }
+  /* ── Unit layout image (Schedule B) ── */
+  #spaRoot .unit-layout { text-align: center; margin: 8px 0; }
+  #spaRoot .unit-layout img { display: block; max-width: 100%; max-height: 150mm;
+                              height: auto; margin: 0 auto; border: 1px solid #555; }
 </style>
 </head>
 <body>
@@ -66,11 +76,11 @@ const C_PASSPORT    = 'UF_CRM_1766983512371';
 const C_EXP         = 'UF_CRM_1781656252906';
 const C_NOM_NAME    = 'UF_CRM_1781467071988';
 const C_NOM_NAT     = 'UF_CRM_1781467099554';
-const C_NOM_PASS    = 'UF_CRM_1781467123055';
+const C_NOM_PASS    = 'UF_CRM_1781648170181';
 const C_NOM_EXP     = 'UF_CRM_1781467149267';
 
 // Deal fields
-const D_PARKING     = 'UF_CRM_1781467165113';
+const D_PARKING     = 'UF_CRM_1781648187687';
 const D_PAYMODE     = 'UF_CRM_1781467248957';
 const D_BANK        = 'UF_CRM_1781467271543';
 const D_COMPLETION  = 'UF_CRM_1781467301674';
@@ -94,6 +104,12 @@ const CO_REP_PASS_EXP = 'UF_CRM_1781648066813';
 // Product (catalog) property IDs
 const PROD_TYPE = 177;   // Unit Type
 const PROD_AREA = 259;   // Area (per client: use 259, ignore template's 113)
+const PROD_FLOOR = 261;  // Floor
+const SQFT_TO_SQM = 0.09290304;   // area is stored in SqFt; SPA shows SqM
+
+// Same-origin image proxy (Express route in server.js — /image-proxy)
+const IMAGE_PROXY = '/image-proxy?url=';
+let PAYMODE_MAP = {};   // deal payment-mode enum: option id -> label (fetched at load)
 
 // Fees / assumptions
 const ADMIN_FEE = 5250;  // AED flat
@@ -490,18 +506,32 @@ async function loadAll() {
         } catch (e) { console.warn('[SPA] company load failed:', e); }
     }
 
-    let product = null, unitName = '';
+    let product = null, unitName = '', unitImage = '';
     try {
         const rowsData = await callBX('crm.deal.productrows.get', { id: currentDealId });
         const rows = Array.isArray(rowsData) ? rowsData : (rowsData.result || []);
         if (rows.length) {
             unitName = rows[0].PRODUCT_NAME || '';
             const pid = rows[0].PRODUCT_ID;
-            if (pid) { const pd = await callBX('catalog.product.get', { id: pid }); product = (pd && pd.product) ? pd.product : pd; }
+            if (pid) {
+                const pd = await callBX('catalog.product.get', { id: pid });
+                product = (pd && pd.product) ? pd.product : pd;
+                unitImage = await loadUnitImage(pid, product);
+            }
         }
     } catch (e) { console.warn('[SPA] product load failed (check catalog scope):', e); }
 
-    SPA_DATA = buildContext(deal, contacts, company, product, unitName, pj, plan);
+    // Payment-mode enum (deal field) — option id -> label
+    try {
+        const pmRes = await callBX('crm.deal.userfield.list', { filter: { FIELD_NAME: D_PAYMODE } });
+        const pmUfs = Array.isArray(pmRes) ? pmRes : (pmRes.result || []);
+        if (pmUfs.length && pmUfs[0].LIST) {
+            PAYMODE_MAP = {};
+            pmUfs[0].LIST.forEach(function(o) { PAYMODE_MAP[o.ID] = o.VALUE; });
+        }
+    } catch (e) { /* fall back to raw id */ }
+
+    SPA_DATA = buildContext(deal, contacts, company, product, unitName, pj, plan, unitImage);
     await renderSpa(SPA_DATA);
     document.getElementById('attachBtn').disabled = false;
     setStatus('Ready — review, then Attach to Deal.');
@@ -578,7 +608,7 @@ function companyToObj(co) {
         repPassportExp: maybeDate(getUF(co, CO_REP_PASS_EXP))
     };
 }
-function buildContext(deal, contacts, company, product, unitName, pj, plan) {
+function buildContext(deal, contacts, company, product, unitName, pj, plan, unitImage) {
     const today = new Date();
     const discPct = toNumber(pj.discountPct);
     const net = toNumber(deal.OPPORTUNITY);
@@ -613,12 +643,92 @@ function buildContext(deal, contacts, company, product, unitName, pj, plan) {
         privatePool: (pj.privatePool === 'Yes' || pj.privatePool === true) ? 'Yes' : 'No',
         downpaymentAmt: downpaymentAmt, buyerName: buyerName, bodyAddress: bodyAddress,
         unitName: unitName,
+        unitImage: unitImage || '',
         spsl: 'SPSL-' + String(currentDealId).padStart(4, '0')
     };
 }
 
+/* ════════════════ FIELD/IMAGE HELPERS ════════════════ */
+// Convert ASCII digits to Arabic-Indic (for the Arabic date cell)
+function arabicDigits(s) {
+    const map = ['٠','١','٢','٣','٤','٥','٦','٧','٨','٩'];
+    return String(s == null ? '' : s).replace(/[0-9]/g, function(d) { return map[+d]; });
+}
+// Area is stored in SqFt; SPA shows SqM
+function sqftToSqm(v) {
+    const n = parseFloat(String(v).replace(/[^0-9.]/g, ''));
+    if (!isFinite(n) || !n) return '';
+    return round2(n * SQFT_TO_SQM) + ' Sq.m';
+}
+// Resolve the payment-mode enum id -> label
+function resolvePayMode(id) { return id ? (PAYMODE_MAP[id] || id) : ''; }
+
+// ── Unit image (same approach as the Booking Form) ──
+function pictureUrl(v) {
+    if (!v) return '';
+    if (Array.isArray(v)) v = v[0];
+    if (v && typeof v === 'object') {
+        return v.downloadUrl || v.DOWNLOAD_URL || v.detailUrl || v.DETAIL_URL ||
+               v.showUrl || v.SHOW_URL || v.src || v.SRC || v.url || v.URL || '';
+    }
+    if (typeof v === 'string' && v.indexOf('http') === 0) return v;
+    return '';
+}
+function absolutize(url) {
+    if (!url || url.indexOf('http') === 0) return url || '';
+    let dom = (BX24.getDomain && BX24.getDomain()) || location.host;
+    dom = dom.replace(/^https?:\/\//, '');
+    return 'https://' + dom + (url.charAt(0) === '/' ? '' : '/') + url;
+}
+async function toDataURL(url) {
+    try {
+        const resp = await fetch(url, { mode: 'cors' });
+        const blob = await resp.blob();
+        return await new Promise(function(res, rej) {
+            const fr = new FileReader();
+            fr.onload = function() { res(fr.result); };
+            fr.onerror = rej;
+            fr.readAsDataURL(blob);
+        });
+    } catch (e) { console.warn('[SPA] image inline failed, using direct URL:', e); return url; }
+}
+async function loadUnitImage(pid, product) {
+    let url = '';
+    try {
+        const imgData = await callBX('catalog.productImage.list', { productId: pid });
+        let imgs = (imgData && imgData.productImages) ? imgData.productImages
+                 : (imgData && imgData.result && imgData.result.productImages) ? imgData.result.productImages
+                 : (Array.isArray(imgData) ? imgData : (imgData && imgData.result) || []);
+        if (Array.isArray(imgs) && imgs.length) {
+            const order = ['DETAIL_PICTURE', 'PREVIEW_PICTURE', 'MORE_PHOTO'];
+            let chosen = null;
+            for (let i = 0; i < order.length && !chosen; i++) {
+                chosen = imgs.find(function(x) { return x.type === order[i]; });
+            }
+            if (!chosen) chosen = imgs[0];
+            url = chosen ? (chosen.detailUrl || chosen.downloadUrl || chosen.DETAIL_URL || chosen.DOWNLOAD_URL || '') : '';
+        }
+    } catch (e) { console.warn('[SPA] productImage.list failed:', e); }
+    if (!url) {
+        try {
+            const pr = await callBX('crm.product.get', { id: pid });
+            const prod = pr && pr.result ? pr.result : pr;
+            url = pictureUrl(prod && prod.DETAIL_PICTURE) || pictureUrl(prod && prod.PREVIEW_PICTURE);
+        } catch (e) { console.warn('[SPA] crm.product.get failed:', e); }
+    }
+    if (!url && product) {
+        url = pictureUrl(product.detailPicture) || pictureUrl(product.previewPicture) ||
+              pictureUrl(product.DETAIL_PICTURE) || pictureUrl(product.PREVIEW_PICTURE);
+    }
+    if (!url) { console.warn('[SPA] no unit image URL found for product', pid); return ''; }
+    url = absolutize(url);
+    const fetchUrl = IMAGE_PROXY ? (IMAGE_PROXY + encodeURIComponent(url)) : url;
+    const inlined = await toDataURL(fetchUrl);
+    if (inlined && inlined.indexOf('data:') === 0) return inlined;
+    return url;
+}
+
 /* ════════════════ PLACEHOLDER MAP ════════════════ */
-// Inner-id constants used for Arabic translation routing
 const I_CITY = 'UfCrm151776677095087', I_COUNTRY = 'UfCrm151776677134809',
       I_NAT = 'UfCrm151776676964285', I_NOM_NAT = 'UfCrm151778950670679',
       I_PAYMODE = 'UfCrm151778950818534', I_PRICE_WORDS = 'UfCrm151778950758041';
@@ -627,6 +737,7 @@ function buildEnMap(d) {
     const deal = d.deal, c = d.buyer;
     const m = {};
     m['{DocumentCreateTime}']          = fmtDate(d.today);
+    m['{DocumentCreateTimeAR}']        = arabicDigits(fmtDate(d.today));         // Arabic date cell
     m['{UfCrm151776676644246}']        = d.buyerName;                          // Buyer Name
     m['{UfCrm151776677178207}']        = d.bodyAddress;                        // Address (all purchasers / company)
     m['{UfCrm151776677041562}']        = field(c, deal, C_POBOX);             // P.O. Box
@@ -644,10 +755,11 @@ function buildEnMap(d) {
     m['{UfCrm151778950699925}']        = maybeDate(field(c, deal, C_NOM_EXP)); // Nominee Exp
     m['{ProductsProductTitle}']        = d.unitName;                          // Unit No
     m['{UfCrm151778950723706}']        = field(c, deal, D_PARKING);           // Parking
-    m['{ProductsProductProperty113}']  = getProp(d.product, PROD_AREA);        // Area (property 259)
+    m['{ProductsProductProperty113}']  = sqftToSqm(getProp(d.product, PROD_AREA)); // Area in SqM
     m['{ProductsProductProperty177}']  = getProp(d.product, PROD_TYPE);        // Unit Type (property 177)
+    m['{ProductsProductFloor}']        = getProp(d.product, PROD_FLOOR);        // Floor (Schedule B)
     m['{UfCrm151778950758041}']        = (numToWordsEN(d.net) + ' UAE Dirhams Only').trim();  // Total in words
-    m['{UfCrm151778950818534}']        = field(c, deal, D_PAYMODE);           // Payment Mode
+    m['{UfCrm151778950818534}']        = resolvePayMode(field(c, deal, D_PAYMODE)); // Payment Mode (label)
     m['{DOWNPAYMENT_AMOUNT}']          = money(d.downpaymentAmt);             // actual down payment
     m['{UfCrm151778937940306}']        = money(d.net);                        // Total Sale Price (numeric)
     m['{UfCrm151778950836438}']        = field(c, deal, D_BANK);              // Bank
@@ -692,12 +804,37 @@ async function renderSpa(d) {
     // 2b) Dynamic buyer rows (per purchaser, or company) — injected after token replacement
     out = out.split('{{BUYER_ROWS}}').join(buyerRowsHtml(d));
 
+    // 2c) Unit layout image in Schedule B (falls back to the original caption)
+    const layoutHtml = d.unitImage
+        ? '<div class="unit-layout"><img src="' + d.unitImage + '" alt="Unit Layout"></div>'
+        : '<p><strong>Floor plan to paste</strong></p>';
+    out = out.split('{{UNIT_LAYOUT}}').join(layoutHtml);
+
     const root = document.getElementById('spaRoot');
     root.innerHTML = out;
 
     // 3) Schedule A installment table
     const slot = document.getElementById('scheduleA-installments');
     if (slot) slot.innerHTML = scheduleAHtml(d);
+
+    // 4) Right-align any Arabic text
+    const arRe = /[\u0600-\u06FF]/;
+    root.querySelectorAll('td, th, p, li, h1, h2, h3, span').forEach(function(el) {
+        if (arRe.test(el.textContent || '')) { el.style.direction = 'rtl'; el.style.textAlign = 'right'; }
+    });
+
+    // 5) Centre the schedule headings and their bold subtitles
+    root.querySelectorAll('p, h2, h3').forEach(function(el) {
+        const t = (el.textContent || '').trim();
+        if (/^SCHEDULE [A-F]\b/i.test(t) ||
+            t === 'SCHEDULE OF PAYMENT & UNIT PRICE' ||
+            t === 'Unit Plan' ||
+            /^DECLARATION OF ADHERENCE/i.test(t) ||
+            /^Declaration of Acceptance/i.test(t) ||
+            /^THE DECLARATION OF/i.test(t)) {
+            el.style.textAlign = 'center';
+        }
+    });
 }
 
 /* Build the APPLICANT DETAILS buyer rows: one bilingual block per purchaser
@@ -770,10 +907,7 @@ function scheduleAHtml(d) {
     }
     return '' +
         '<div class="schedA-summary">' +
-            '<div><b>Discount:</b> ' + (d.discPct || 0) + '% (' + money(d.discValue) + ')</div>' +
             '<div><b>Net Payable:</b> ' + money(d.net) + '</div>' +
-            '<div><b>DLD Fee (4% of purchase price, payable separately):</b> ' + money(d.dldFee) + '</div>' +
-            '<div><b>Admin Fee (payable separately):</b> ' + money(d.adminFee) + '</div>' +
             '<div><b>Furnished:</b> ' + (d.furnished === 'Yes' ? 'Yes (' + money(FURNISHED_FEE) + ')' : 'No') + '</div>' +
             '<div><b>Private Pool:</b> ' + (d.privatePool === 'Yes' ? 'Yes (' + money(PRIVATE_POOL_FEE) + ')' : 'No') + '</div>' +
         '</div>' +
@@ -808,15 +942,16 @@ function drawHeaderFooter(pdf, pageNo, pageW, pageH, logoL, logoR, spsl) {
     pdf.setFont('helvetica', 'italic'); pdf.setFontSize(8); pdf.setTextColor(110);
     pdf.text(spsl, m, 7);
     pdf.setFont('helvetica', 'normal'); pdf.setTextColor(0);
-    function place(logo, side) {
+    function place(logo, side, targetH, maxW) {
         if (!logo || !logo.dataUrl) return;
-        let h = 11, w = h * (logo.w / logo.h);
-        if (w > 40) { w = 40; h = w / (logo.w / logo.h); }
+        let h = targetH, w = h * (logo.w / logo.h);
+        if (w > maxW) { w = maxW; h = w / (logo.w / logo.h); }
         const x = (side === 'L') ? m : (pageW - m - w);
-        const y = 14 - h / 2;
+        const y = 13 - h / 2;
         pdf.addImage(logo.dataUrl, logo.type, x, y, w, h);
     }
-    place(logoL, 'L'); place(logoR, 'R');
+    place(logoL, 'L', 12, 42);   // Premier Choice (wide)
+    place(logoR, 'R', 18, 48);   // Southlofts — larger so it reads clearly
     pdf.setFontSize(9);
     pdf.text('Page ' + pageNo, m, pageH - 8);
     const initials = 'Buyer Initials: __________';
