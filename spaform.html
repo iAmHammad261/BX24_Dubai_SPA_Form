@@ -892,11 +892,9 @@ async function renderSpa(d) {
             el.style.textAlign = 'center';
         }
         if (/^SCHEDULE [A-F]\s*$/i.test(t)) {
-            // Force the schedule onto a fresh page via two independent mechanisms:
-            // a real break element (legacy mode) AND page-break-before (css mode).
-            var brk = document.createElement('div');
-            brk.className = 'html2pdf__page-break';
-            if (el.parentNode) el.parentNode.insertBefore(brk, el);
+            // Start each schedule on a fresh page. Use ONE mechanism only — a CSS
+            // page-break-before. (Combining it with an inserted break element caused
+            // a double break, i.e. a blank page before the heading.)
             el.style.pageBreakBefore = 'always';
             el.style.breakBefore = 'page';
         }
