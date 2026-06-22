@@ -57,8 +57,6 @@
   #spaRoot li { margin: 3px 0; }
   /* ── Keep these blocks from splitting across pages ── */
   #spaRoot .avoid-block { page-break-inside: avoid; }
-  /* ── Each Schedule starts on a fresh page ── */
-  #spaRoot .sched-break { page-break-before: always; break-before: page; }
   /* ── Unit layout image (Schedule B) ── */
   #spaRoot .unit-layout { text-align: center; margin: 8px 0; page-break-inside: avoid; }
   #spaRoot .unit-layout img { display: block; max-width: 100%; max-height: 150mm;
@@ -311,16 +309,6 @@ function getProp(product, id) {
 }
 function ordinal(n) { const s = ['th','st','nd','rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
 function round2(n) { return Math.round(n * 100) / 100; }
-
-function cleanAddress(raw) {
-    if (raw == null) return '';
-    let s = String(raw);
-    if (s.indexOf('|;|') === -1) return s.trim();
-    let parts = s.split('|;|').map(function(x) { return x.trim(); });
-    while (parts.length && /^\d+$/.test(parts[parts.length - 1])) parts.pop();  // drop trailing loc id(s)
-    return parts.filter(Boolean).join(', ');
-}
-
 function parseInstNo(label) {
     const m = String(label).match(/^(\d+)(st|nd|rd|th)\s+Installment/i);
     return m ? parseInt(m[1], 10) : null;
@@ -640,7 +628,7 @@ function contactToPurchaser(c) {
     const name = [c.NAME, c.SECOND_NAME, c.LAST_NAME].filter(Boolean).join(' ').trim();
     return {
         name:        name,
-        address:     cleanAddress(getUF(c, C_ADDRESS)),
+        address:     getUF(c, C_ADDRESS),
         pobox:       getUF(c, C_POBOX),
         uaeResident: UAE_RESIDENT_MAP[getUF(c, C_UAE_RESIDENT)] || '',
         city:        getUF(c, C_CITY),
@@ -656,7 +644,7 @@ function companyToObj(co) {
     if (!co) return null;
     return {
         name:           co.TITLE || '',
-        address:        cleanAddress(getUF(co, CO_ADDRESS)),
+        address:        getUF(co, CO_ADDRESS),
         city:           getUF(co, CO_CITY),
         country:        enumVal(CO_COUNTRY, getUF(co, CO_COUNTRY)),
         mobile:         getMulti(co, 'PHONE'),
@@ -896,7 +884,11 @@ async function renderSpa(d) {
             el.style.textAlign = 'center';
         }
         if (/^SCHEDULE [A-F]\s*$/i.test(t)) {
-            el.classList.add('sched-break');   // html2pdf forces a page break before these
+            // Force the schedule onto a fresh page. A real break element in the flow
+            // is honored by html2pdf's 'legacy' mode far more reliably than a CSS rule.
+            var brk = document.createElement('div');
+            brk.className = 'html2pdf__page-break';
+            if (el.parentNode) el.parentNode.insertBefore(brk, el);
         }
     });
 }
@@ -1040,13 +1032,14 @@ async function attachToDeal() {
             image: { type: 'jpeg', quality: 0.85 },
             html2canvas: { scale: 1.5, useCORS: true, backgroundColor: '#ffffff' },
             jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-            // avoid-all: keep rows, list items and paragraphs whole (no border slivers
-            // at a page bottom, no text cut across pages).
-            // before: force every Schedule heading onto a fresh page.
+            // css+legacy mode. avoid is limited to ATOMIC elements (rows, list items,
+            // paragraphs, headings, images) — never tables/lists/containers — so the
+            // table keeps flowing and filling each page, while no single row or line of
+            // text is sliced across a page boundary. Schedule breaks use inserted
+            // .html2pdf__page-break divs (legacy mode).
             pagebreak: {
-                mode: ['avoid-all', 'css', 'legacy'],
-                before: ['.sched-break'],
-                avoid: ['tr', 'img', '.unit-layout', '.avoid-block']
+                mode: ['css', 'legacy'],
+                avoid: ['tr', 'li', 'p', 'h1', 'h2', 'h3', 'img', '.avoid-block', '.unit-layout']
             }
         };
 
