@@ -57,6 +57,8 @@
   #spaRoot li { margin: 3px 0; }
   /* ── Keep these blocks from splitting across pages ── */
   #spaRoot .avoid-block { page-break-inside: avoid; }
+  /* ── Each Schedule starts on a fresh page ── */
+  #spaRoot .sched-break { page-break-before: always; break-before: page; }
   /* ── Unit layout image (Schedule B) ── */
   #spaRoot .unit-layout { text-align: center; margin: 8px 0; page-break-inside: avoid; }
   #spaRoot .unit-layout img { display: block; max-width: 100%; max-height: 150mm;
@@ -135,6 +137,21 @@ async function loadEnum(entity, fieldCode) {
 function enumVal(fieldCode, id) {
     const m = ENUM_MAPS[fieldCode];
     return id ? ((m && m[id]) ? m[id] : id) : '';
+}
+// Fetch every list-field's options for an entity (contact/company/deal) at once and
+// merge id->label maps into ENUM_MAPS. Robust to a dropdown living on any entity.
+async function loadAllEnums(entity) {
+    try {
+        const res = await callBX('crm.' + entity + '.userfield.list', {});
+        const ufs = Array.isArray(res) ? res : (res.result || []);
+        ufs.forEach(function(uf) {
+            if (uf.LIST && uf.LIST.length) {
+                const m = {};
+                uf.LIST.forEach(function(o) { m[o.ID] = o.VALUE; });
+                ENUM_MAPS[uf.FIELD_NAME] = m;
+            }
+        });
+    } catch (e) { /* leave unresolved -> raw id */ }
 }
 
 // Fees / assumptions
@@ -557,12 +574,12 @@ async function loadAll() {
         }
     } catch (e) { /* fall back to raw id */ }
 
-    // Dropdown enum maps (nationality/country are now list fields)
+    // Dropdown enum maps. Load every list field for contact/company/deal so each
+    // dropdown (incl. Nominee Nationality, wherever it lives) resolves to its label.
     await Promise.all([
-        loadEnum('contact', C_NATIONALITY),
-        loadEnum('contact', C_COUNTRY),
-        loadEnum('contact', C_NOM_NAT),
-        loadEnum('company', CO_COUNTRY)
+        loadAllEnums('contact'),
+        loadAllEnums('company'),
+        loadAllEnums('deal')
     ]);
 
     SPA_DATA = buildContext(deal, contacts, company, product, unitName, pj, plan, unitImage);
@@ -779,8 +796,8 @@ function buildEnMap(d) {
     m['{UfCrm151776677095087}']        = field(c, deal, C_CITY);              // City
     m['{UfCrm151776677210899}']        = getMulti(c || {}, 'PHONE');          // Phone/Mobile (standard mobile)
     m['{UfCrm151776679367829}']        = getMulti(c || {}, 'EMAIL');          // Email
-    m['{UfCrm151776677134809}']        = field(c, deal, C_COUNTRY);           // Country
-    m['{UfCrm151776676964285}']        = field(c, deal, C_NATIONALITY);       // Nationality
+    m['{UfCrm151776677134809}']        = enumVal(C_COUNTRY, field(c, deal, C_COUNTRY));         // Country
+    m['{UfCrm151776676964285}']        = enumVal(C_NATIONALITY, field(c, deal, C_NATIONALITY)); // Nationality
     m['{UfCrm151776677008771}']        = field(c, deal, C_PASSPORT);          // Passport No
     m['{UfCrm151778950639813}']        = maybeDate(field(c, deal, C_EXP));     // Exp Date
     m['{UfCrm151778950656579}']        = field(c, deal, C_NOM_NAME);          // Nominee Name
@@ -869,8 +886,7 @@ async function renderSpa(d) {
             el.style.textAlign = 'center';
         }
         if (/^SCHEDULE [A-F]\s*$/i.test(t)) {
-            el.style.pageBreakBefore = 'always';
-            el.style.breakBefore = 'page';
+            el.classList.add('sched-break');   // html2pdf forces a page break before these
         }
     });
 }
@@ -1014,7 +1030,14 @@ async function attachToDeal() {
             image: { type: 'jpeg', quality: 0.85 },
             html2canvas: { scale: 1.5, useCORS: true, backgroundColor: '#ffffff' },
             jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-            pagebreak: { mode: ['css', 'legacy'], avoid: ['tr', '.avoid-block', '.unit-layout', 'img'] }
+            // avoid-all: keep rows, list items and paragraphs whole (no border slivers
+            // at a page bottom, no text cut across pages).
+            // before: force every Schedule heading onto a fresh page.
+            pagebreak: {
+                mode: ['avoid-all', 'css', 'legacy'],
+                before: ['.sched-break'],
+                avoid: ['tr', 'img', '.unit-layout', '.avoid-block']
+            }
         };
 
         // Render body, then post-process the jsPDF instance
