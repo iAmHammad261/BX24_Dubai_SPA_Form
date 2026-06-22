@@ -1,12 +1,14 @@
 {
   "name": "bitrix24-dubai-spa-form",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Dubai SPA (Sale & Purchase Agreement) generator tab for Bitrix24 (South Lofts)",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "express": "^4.19.2"
+    "express": "^4.19.2",
+    "puppeteer-core": "^22.15.0",
+    "pdf-lib": "^1.17.1"
   }
 }

@@ -1,0 +1,17 @@
+# nixpacks.toml
+# Installs Chromium (for Puppeteer) plus fonts so the server-rendered PDF shows
+# Latin AND Arabic text correctly. Place this file in the repo root, next to
+# server.js / package.json, then redeploy on Dokploy.
+#
+# Chromium installs to /usr/bin/chromium on the Debian-based Nixpacks image, which
+# is the path server.js uses by default (PUPPETEER_EXECUTABLE_PATH overrides it).
+
+[phases.setup]
+aptPkgs = [
+  "chromium",
+  "ca-certificates",
+  "fonts-liberation",
+  "fonts-noto-core",
+  "fonts-noto-cjk",
+  "fonts-dejavu-core"
+]

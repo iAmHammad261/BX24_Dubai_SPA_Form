@@ -5,8 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Dubai SPA Form</title>
 <script src="https://api.bitrix24.com/api/v1/"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-<style>
+<style id="spaStyle">
   body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; background: #eef1f3; color: #1d2733; }
   .topbar { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 14px;
             padding: 10px 16px; background: #0e5a3c; color: #fff; }
@@ -57,6 +56,10 @@
   #spaRoot li { margin: 3px 0; }
   /* ── Keep these blocks from splitting across pages ── */
   #spaRoot .avoid-block { page-break-inside: avoid; }
+  /* ── Pagination rules honored by the server-side Chrome print engine ── */
+  #spaRoot td, #spaRoot th { page-break-inside: avoid; }
+  #spaRoot .leaf-li { page-break-inside: avoid; }
+  #spaRoot h1, #spaRoot h2, #spaRoot h3, #spaRoot h4 { page-break-after: avoid; }
   /* ── Unit layout image (Schedule B) ── */
   #spaRoot .unit-layout { text-align: center; margin: 8px 0; page-break-inside: avoid; }
   #spaRoot .unit-layout img { display: block; max-width: 100%; max-height: 150mm;
@@ -981,100 +984,40 @@ function scheduleAHtml(d) {
 }
 
 /* ════════════════ ATTACH ════════════════ */
-// Load an image (same-origin static asset) into a dataURL + natural size for jsPDF.
-function loadImg(url, jpeg) {
-    return new Promise(function(resolve) {
-        const img = new Image();
-        img.onload = function() {
-            try {
-                const cv = document.createElement('canvas');
-                cv.width = img.naturalWidth; cv.height = img.naturalHeight;
-                cv.getContext('2d').drawImage(img, 0, 0);
-                const fmt = jpeg ? 'image/jpeg' : 'image/png';
-                resolve({ dataUrl: cv.toDataURL(fmt, jpeg ? 0.85 : undefined),
-                          w: img.naturalWidth, h: img.naturalHeight, type: jpeg ? 'JPEG' : 'PNG' });
-            } catch (e) { resolve(null); }
-        };
-        img.onerror = function() { resolve(null); };
-        img.src = url;
-    });
-}
-
-// Header (SPSL ref + two logos) and footer (page no + buyer initials) on a body page.
-function drawHeaderFooter(pdf, pageNo, pageW, pageH, logoL, logoR, spsl) {
-    const m = 10;
-    pdf.setFont('helvetica', 'italic'); pdf.setFontSize(8); pdf.setTextColor(110);
-    pdf.text(spsl, m, 7);
-    pdf.setFont('helvetica', 'normal'); pdf.setTextColor(0);
-    function place(logo, side, targetH, maxW) {
-        if (!logo || !logo.dataUrl) return;
-        let h = targetH, w = h * (logo.w / logo.h);
-        if (w > maxW) { w = maxW; h = w / (logo.w / logo.h); }
-        const x = (side === 'L') ? m : (pageW - m - w);
-        const y = 13 - h / 2;
-        pdf.addImage(logo.dataUrl, logo.type, x, y, w, h);
-    }
-    place(logoL, 'L', 12, 42);   // Premier Choice (wide)
-    place(logoR, 'R', 18, 58);   // Southlofts — trimmed + larger so it reads clearly
-    pdf.setFontSize(9);
-    pdf.text('Page ' + pageNo, m, pageH - 8);
-    const initials = 'Buyer Initials: __________';
-    pdf.text(initials, pageW - m - pdf.getTextWidth(initials), pageH - 8);
-}
-
+// Build a self-contained HTML document (the SPA CSS + the rendered body, with the
+// unit image already inlined as a data-URI) and send it to the server, which renders
+// the PDF with headless Chrome (clean pagination, header/footer, cover page).
 async function attachToDeal() {
     const btn = document.getElementById('attachBtn');
     btn.disabled = true; btn.textContent = 'Generating PDF…';
-    setStatus('Generating PDF (this can take a moment for a long document)…');
+    setStatus('Generating PDF on the server (this can take a moment for a long document)…');
     try {
-        const el = document.getElementById('spaRoot');
         const spsl = (SPA_DATA && SPA_DATA.spsl) ? SPA_DATA.spsl : ('SPSL-' + String(currentDealId).padStart(4, '0'));
+        const css = document.getElementById('spaStyle').textContent;
+        const body = document.getElementById('spaRoot').outerHTML;
+        // White background + no body padding for print; the SPA CSS is reused as-is.
+        const html = '<!DOCTYPE html><html><head><meta charset="utf-8">' +
+                     '<style>' + css + '</style>' +
+                     '<style>body{margin:0;padding:0;background:#fff;}</style>' +
+                     '</head><body>' + body + '</body></html>';
 
-        // Load cover + logos (same-origin assets served by the app)
-        const cover = await loadImg('cover.png', true);
-        const logoL = await loadImg('logo-pci.png', false);
-        const logoR = await loadImg('logo-southlofts.png', false);
-
-        const opt = {
-            margin: [24, 10, 16, 10],   // top/left/bottom/right (mm): room for header + footer
-            image: { type: 'jpeg', quality: 0.85 },
-            html2canvas: { scale: 1.5, useCORS: true, backgroundColor: '#ffffff' },
-            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-            // avoid is limited to ATOMIC leaf elements (table rows, leaf clauses,
-            // paragraphs, headings, images) — never the section-wrapping <ul><li> or
-            // tables/lists — so containers keep flowing and filling each page while no
-            // single row or line is sliced. Schedule breaks use inserted break divs.
-            pagebreak: {
-                mode: ['css', 'legacy'],
-                avoid: ['tr', '.leaf-li', 'p', 'h1', 'h2', 'h3', 'img', '.avoid-block', '.unit-layout']
-            }
-        };
-
-        // Render body, then post-process the jsPDF instance
-        const pdf = await html2pdf().set(opt).from(el).toPdf().get('pdf');
-        const pageW = pdf.internal.pageSize.getWidth();
-        const pageH = pdf.internal.pageSize.getHeight();
-        const bodyPages = pdf.internal.getNumberOfPages();
-
-        // Header/footer on each body page (numbered Page 1..N)
-        for (let i = 1; i <= bodyPages; i++) {
-            pdf.setPage(i);
-            drawHeaderFooter(pdf, i, pageW, pageH, logoL, logoR, spsl);
+        const resp = await fetch('/render-pdf', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ html: html, spsl: spsl })
+        });
+        if (!resp.ok) {
+            const msg = await resp.text().catch(function() { return ''; });
+            throw new Error('Server render failed (' + resp.status + '): ' + msg);
         }
-
-        // Cover as the first page (no header/footer)
-        pdf.insertPage(1);
-        pdf.setPage(1);
-        if (cover && cover.dataUrl) pdf.addImage(cover.dataUrl, cover.type, 0, 0, pageW, pageH);
-
-        const dataUri = pdf.output('datauristring');
-        const base64 = dataUri.split(',')[1];
+        const data = await resp.json();
+        if (!data || !data.base64) throw new Error('Server returned no PDF data');
 
         btn.textContent = 'Attaching…';
         setStatus('Uploading to the deal…');
         const filename = 'Dubai_SPA_' + String(currentDealId) + '.pdf';
         const fields = {};
-        fields[SPA_FILE_FIELD] = { fileData: [filename, base64] };
+        fields[SPA_FILE_FIELD] = { fileData: [filename, data.base64] };
         await callBX('crm.deal.update', { id: currentDealId, fields: fields });
 
         setStatus('\u2713 Attached to the SPA field on the General tab.');
