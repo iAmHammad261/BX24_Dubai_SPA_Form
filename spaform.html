@@ -866,6 +866,14 @@ async function renderSpa(d) {
     const slot = document.getElementById('scheduleA-installments');
     if (slot) slot.innerHTML = scheduleAHtml(d);
 
+    // 3b) Tag only LEAF list items (clauses with no nested list). The skeleton wraps
+    // each whole section in an outer <ul><li><ol>…</ol></li></ul>; avoiding that outer
+    // <li> would try to keep an entire section on one page and dump a huge blank space
+    // after the heading. We keep only the innermost clauses unbreakable.
+    root.querySelectorAll('li').forEach(function(li) {
+        if (!li.querySelector('ol, ul')) li.classList.add('leaf-li');
+    });
+
     // 4) Right-align any Arabic text
     const arRe = /[\u0600-\u06FF]/;
     root.querySelectorAll('td, th, p, li, h1, h2, h3, span').forEach(function(el) {
@@ -884,11 +892,13 @@ async function renderSpa(d) {
             el.style.textAlign = 'center';
         }
         if (/^SCHEDULE [A-F]\s*$/i.test(t)) {
-            // Force the schedule onto a fresh page. A real break element in the flow
-            // is honored by html2pdf's 'legacy' mode far more reliably than a CSS rule.
+            // Force the schedule onto a fresh page via two independent mechanisms:
+            // a real break element (legacy mode) AND page-break-before (css mode).
             var brk = document.createElement('div');
             brk.className = 'html2pdf__page-break';
             if (el.parentNode) el.parentNode.insertBefore(brk, el);
+            el.style.pageBreakBefore = 'always';
+            el.style.breakBefore = 'page';
         }
     });
 }
@@ -1032,14 +1042,13 @@ async function attachToDeal() {
             image: { type: 'jpeg', quality: 0.85 },
             html2canvas: { scale: 1.5, useCORS: true, backgroundColor: '#ffffff' },
             jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-            // css+legacy mode. avoid is limited to ATOMIC elements (rows, list items,
-            // paragraphs, headings, images) — never tables/lists/containers — so the
-            // table keeps flowing and filling each page, while no single row or line of
-            // text is sliced across a page boundary. Schedule breaks use inserted
-            // .html2pdf__page-break divs (legacy mode).
+            // avoid is limited to ATOMIC leaf elements (table rows, leaf clauses,
+            // paragraphs, headings, images) — never the section-wrapping <ul><li> or
+            // tables/lists — so containers keep flowing and filling each page while no
+            // single row or line is sliced. Schedule breaks use inserted break divs.
             pagebreak: {
                 mode: ['css', 'legacy'],
-                avoid: ['tr', 'li', 'p', 'h1', 'h2', 'h3', 'img', '.avoid-block', '.unit-layout']
+                avoid: ['tr', '.leaf-li', 'p', 'h1', 'h2', 'h3', 'img', '.avoid-block', '.unit-layout']
             }
         };
 
