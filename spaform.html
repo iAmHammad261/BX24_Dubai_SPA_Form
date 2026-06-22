@@ -112,10 +112,11 @@ const CO_CITY         = 'UF_CRM_1781647920524';
 const CO_COUNTRY      = 'UF_CRM_1782083162901';   // dropdown
 const CO_AUTHORITY    = 'UF_CRM_1781647957582';
 const CO_LICENSE      = 'UF_CRM_1781650776919';
-const CO_LICENSE_EXP  = 'UF_CRM_1781647988565';
+const CO_LICENSE_EXP  = 'UF_CRM_1781648066813';   // License Expiry Date (corrected)
 const CO_REP          = 'UF_CRM_1781648029271';
+const CO_REP_NAME     = 'UF_CRM_1782068252765';   // Representor's Name
 const CO_REP_PASSPORT = 'UF_CRM_1781648051323';
-const CO_REP_PASS_EXP = 'UF_CRM_1781648066813';
+const CO_REP_PASS_EXP = 'UF_CRM_1781647988565';   // Representor's Passport Expiry (corrected)
 const CO_UAE_INCORP   = 'UF_CRM_1782068122985';   // Dubai Incorporated: Yes (1355) / No (1357)
 const CO_ZONE         = 'UF_CRM_1782068180541';   // Free Zone (1359) / Main Land Company (1361)
 const UAE_INCORP_MAP  = { '1355': 'Yes', '1357': 'No' };
@@ -664,6 +665,7 @@ function companyToObj(co) {
         license:        getUF(co, CO_LICENSE),
         licenseExp:     maybeDate(getUF(co, CO_LICENSE_EXP)),
         representor:    getUF(co, CO_REP),
+        repName:        getUF(co, CO_REP_NAME),
         repPassport:    getUF(co, CO_REP_PASSPORT),
         repPassportExp: maybeDate(getUF(co, CO_REP_PASS_EXP)),
         uaeIncorpId:    String(getUF(co, CO_UAE_INCORP) || ''),
@@ -944,7 +946,8 @@ function buyerRowsHtml(d) {
             r += row('Issuing Authority', co.authority, co.authority, 'جهة الإصدار') +
                  row('Free Zone / Main Land Company', co.zone, co.zone, 'منطقة حرة أو شركة برية');
         } else if (co.uaeIncorpId === '1357') {
-            r += row('Representor', co.representor, co.representor, 'الممثل') +
+            r += row('Representor', '', '', 'الممثل', true) +
+                 row('Representor\u2019s Name', co.repName, co.repName, 'اسم الممثل') +
                  row('Representor Passport No.', co.repPassport, co.repPassport, 'رقم جواز سفر الممثل') +
                  row('Representor Passport Exp.', co.repPassportExp, co.repPassportExp, 'تاريخ انتهاء جواز سفر الممثل');
         }
