@@ -83,7 +83,6 @@ const SPA_FILE_FIELD = 'UF_CRM_1781467358140';   // file field to attach the SPA
 const C_TYPE        = 'UF_CRM_1767876111269';     // enum Purchaser 1 / 2 / Minor
 const C_TYPE_MINOR  = '1353';                      // enum id of the "Minor" option
 const C_GUARDIAN_NAME = 'UF_CRM_1782067857222';    // Guardian's Name (shown when Minor)
-const C_OWNERSHIP   = 'UF_CRM_1782163950371';     // Ownership % (shown when multiple purchasers)
 const C_ADDRESS     = 'UF_CRM_1767353184396';
 const C_POBOX       = 'UF_CRM_1781458421648';
 const C_CITY        = 'UF_CRM_1781458367322';
@@ -319,17 +318,6 @@ function getProp(product, id) {
     return '';
 }
 function ordinal(n) { const s = ['th','st','nd','rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
-
-// Bitrix address fields store components joined by "|;|" with a trailing numeric
-// location id (e.g. "Hello|;|513"). Strip the location id and join the real parts.
-function cleanAddress(raw) {
-    if (raw == null) return '';
-    let s = String(raw);
-    if (s.indexOf('|;|') === -1) return s.trim();
-    let parts = s.split('|;|').map(function(x) { return x.trim(); });
-    while (parts.length && /^\d+$/.test(parts[parts.length - 1])) parts.pop();  // drop trailing loc id(s)
-    return parts.filter(Boolean).join(', ');
-}  
 function round2(n) { return Math.round(n * 100) / 100; }
 function parseInstNo(label) {
     const m = String(label).match(/^(\d+)(st|nd|rd|th)\s+Installment/i);
@@ -652,8 +640,7 @@ function contactToPurchaser(c) {
         name:        name,
         isMinor:     String(getUF(c, C_TYPE)) === C_TYPE_MINOR,
         guardianName: getUF(c, C_GUARDIAN_NAME),
-        ownership:   getUF(c, C_OWNERSHIP),
-        address:     cleanAddress(getUF(c, C_ADDRESS)),
+        address:     getUF(c, C_ADDRESS),
         pobox:       getUF(c, C_POBOX),
         uaeResident: UAE_RESIDENT_MAP[getUF(c, C_UAE_RESIDENT)] || '',
         city:        getUF(c, C_CITY),
@@ -669,7 +656,7 @@ function companyToObj(co) {
     if (!co) return null;
     return {
         name:           co.TITLE || '',
-        address:        cleanAddress(getUF(co, CO_ADDRESS)),
+        address:        getUF(co, CO_ADDRESS),
         city:           getUF(co, CO_CITY),
         country:        enumVal(CO_COUNTRY, getUF(co, CO_COUNTRY)),
         mobile:         getMulti(co, 'PHONE'),
@@ -854,7 +841,7 @@ function arValueFor(inner, enMap, d) {
         case I_NOM_NAT:     return arLookup(NAT_AR, en);
         case I_PAYMODE:     return arLookup(PAYMODE_AR, en);
         case I_PRICE_WORDS: return numToWordsAR(d.net) + ' درهم إماراتي فقط لا غير';
-        default:            return en;   // mirror (names, numbers, dates)
+        default:            return arabicDigits(en);   // numbers/dates -> Arabic numerals; text unchanged
     }
 }
 
@@ -952,20 +939,15 @@ function buyerRowsHtml(d) {
             row('Phone/Mobile', co.mobile, co.mobile, 'الهاتف') +
             row('Email', co.email, co.email, 'الايميل') +
             row('Dubai Incorporated', co.uaeIncorp,
-                (co.uaeIncorp === 'Yes' ? 'نعم' : (co.uaeIncorp === 'No' ? 'لا' : '')), 'مؤسسة في دبي');
-        // Dubai Incorporated = Yes -> Authority + Free Zone/Main Land (no representor)
-        // Dubai Incorporated = No  -> Representor details (no authority/zone)
-        if (co.uaeIncorpId === '1355') {
-            r += row('Issuing Authority', co.authority, co.authority, 'جهة الإصدار') +
-                 row('Free Zone / Main Land Company', co.zone, co.zone, 'منطقة حرة أو شركة برية');
-        } else if (co.uaeIncorpId === '1357') {
-            r += row('Representor', '', '', 'الممثل', true) +
-                 row('Representor\u2019s Name', co.repName, co.repName, 'اسم الممثل') +
-                 row('Representor Passport No.', co.repPassport, co.repPassport, 'رقم جواز سفر الممثل') +
-                 row('Representor Passport Exp.', co.repPassportExp, co.repPassportExp, 'تاريخ انتهاء جواز سفر الممثل');
-        }
-        r += row('Trade License No.', co.license, co.license, 'رقم الرخصة التجارية') +
-             row('License Exp. Date', co.licenseExp, co.licenseExp, 'تاريخ انتهاء الرخصة');
+                (co.uaeIncorp === 'Yes' ? 'نعم' : (co.uaeIncorp === 'No' ? 'لا' : '')), 'مؤسسة في دبي') +
+            // Authority, Representor and Trade License now always show (no Yes/No gating)
+            row('Issuing Authority', co.authority, co.authority, 'جهة الإصدار') +
+            row('Representor', '', '', 'الممثل', true) +
+            row('Representor\u2019s Name', co.repName, co.repName, 'اسم الممثل') +
+            row('Representor Passport No.', co.repPassport, arabicDigits(co.repPassport), 'رقم جواز سفر الممثل') +
+            row('Representor Passport Exp.', co.repPassportExp, arabicDigits(co.repPassportExp), 'تاريخ انتهاء جواز سفر الممثل') +
+            row('Trade License No.', co.license, arabicDigits(co.license), 'رقم الرخصة التجارية') +
+            row('License Exp. Date', co.licenseExp, arabicDigits(co.licenseExp), 'تاريخ انتهاء الرخصة');
         return r;
     }
     const ps = (d.purchasers && d.purchasers.length) ? d.purchasers : [{
@@ -981,38 +963,34 @@ function buyerRowsHtml(d) {
             // then the remaining fields relabelled as the Guardian's (English + Arabic).
             h += row(multi ? ('Purchaser ' + n + ' (Minor)') : 'Purchaser (Minor)', '', '',
                      multi ? ('المشتري ' + n + ' (قاصر)') : 'المشتري (قاصر)', true);
-            h += row('Buyer Name', p.name, p.name, 'اسم المشتري', true);
-            h += row('Guardian\u2019s Name', p.guardianName, p.guardianName, 'اسم ولي الأمر', true);
-            h += row('Guardian\u2019s Address', p.address, p.address, 'عنوان ولي الأمر');
-            h += row('Guardian\u2019s P.O. Box', p.pobox, p.pobox, 'صندوق بريد ولي الأمر');
+            h += row('Buyer Name', p.name, arabicDigits(p.name), 'اسم المشتري', true);
+            h += row('Guardian\u2019s Name', p.guardianName, arabicDigits(p.guardianName), 'اسم ولي الأمر', true);
+            h += row('Guardian\u2019s Address', p.address, arabicDigits(p.address), 'عنوان ولي الأمر');
+            h += row('Guardian\u2019s P.O. Box', p.pobox, arabicDigits(p.pobox), 'صندوق بريد ولي الأمر');
             h += row('Guardian\u2019s UAE Resident', p.uaeResident,
                      (p.uaeResident === 'Yes' ? 'نعم' : (p.uaeResident === 'No' ? 'لا' : '')), 'ولي الأمر مقيم في الإمارات');
             h += row('Guardian\u2019s City', p.city, arLookup(CITY_AR, p.city), 'مدينة ولي الأمر');
-            h += row('Guardian\u2019s Phone/Mobile', p.phone, p.phone, 'هاتف ولي الأمر');
+            h += row('Guardian\u2019s Phone/Mobile', p.phone, arabicDigits(p.phone), 'هاتف ولي الأمر');
             h += row('Guardian\u2019s Email', p.email, p.email, 'البريد الإلكتروني لولي الأمر');
             h += row('Guardian\u2019s Country', p.country, arLookup(COUNTRY_AR, p.country), 'بلد ولي الأمر');
             h += row('Guardian\u2019s Nationality', p.nationality, arLookup(NAT_AR, p.nationality), 'جنسية ولي الأمر');
-            h += row('Guardian\u2019s Passport No.', p.passport, p.passport, 'رقم جواز سفر ولي الأمر');
-            h += row('Guardian\u2019s Exp. Date', p.exp, p.exp, 'تاريخ انتهاء جواز سفر ولي الأمر');
+            h += row('Guardian\u2019s Passport No.', p.passport, arabicDigits(p.passport), 'رقم جواز سفر ولي الأمر');
+            h += row('Guardian\u2019s Exp. Date', p.exp, arabicDigits(p.exp), 'تاريخ انتهاء جواز سفر ولي الأمر');
             return;
         }
         if (multi) h += row('Purchaser ' + n, '', '', 'المشتري ' + n, true);
-        h += row('Buyer Name', p.name, p.name, 'اسم المشتري', true);
-        if (multi) {
-            const own = p.ownership ? (String(p.ownership).indexOf('%') >= 0 ? p.ownership : p.ownership + '%') : '';
-            h += row('Ownership %', own, own, 'نسبة الملكية');
-        }
-        h += row('Address', p.address, p.address, 'العنوان');
-        h += row('P.O. Box', p.pobox, p.pobox, 'رقم صندوق البريد');
+        h += row('Buyer Name', p.name, arabicDigits(p.name), 'اسم المشتري', true);
+        h += row('Address', p.address, arabicDigits(p.address), 'العنوان');
+        h += row('P.O. Box', p.pobox, arabicDigits(p.pobox), 'رقم صندوق البريد');
         h += row('UAE Resident', p.uaeResident,
                  (p.uaeResident === 'Yes' ? 'نعم' : (p.uaeResident === 'No' ? 'لا' : '')), 'مقيم في الإمارات');
         h += row('City', p.city, arLookup(CITY_AR, p.city), 'مدينة');
-        h += row('Phone/Mobile', p.phone, p.phone, 'الهاتف');
+        h += row('Phone/Mobile', p.phone, arabicDigits(p.phone), 'الهاتف');
         h += row('Email', p.email, p.email, 'الايميل');
         h += row('Country', p.country, arLookup(COUNTRY_AR, p.country), 'البلد');
         h += row('Nationality', p.nationality, arLookup(NAT_AR, p.nationality), 'الجنسية');
-        h += row('Passport No.', p.passport, p.passport, 'رقم جواز السفر');
-        h += row('Exp. Date', p.exp, p.exp, 'تاريخ الانتهاء');
+        h += row('Passport No.', p.passport, arabicDigits(p.passport), 'رقم جواز السفر');
+        h += row('Exp. Date', p.exp, arabicDigits(p.exp), 'تاريخ الانتهاء');
     });
     return h;
 }
