@@ -319,6 +319,17 @@ function getProp(product, id) {
     return '';
 }
 function ordinal(n) { const s = ['th','st','nd','rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
+
+// Bitrix address fields store components joined by "|;|" with a trailing numeric
+// location id (e.g. "Hello|;|513"). Strip the location id and join the real parts.
+function cleanAddress(raw) {
+    if (raw == null) return '';
+    let s = String(raw);
+    if (s.indexOf('|;|') === -1) return s.trim();
+    let parts = s.split('|;|').map(function(x) { return x.trim(); });
+    while (parts.length && /^\d+$/.test(parts[parts.length - 1])) parts.pop();  // drop trailing loc id(s)
+    return parts.filter(Boolean).join(', ');
+}  
 function round2(n) { return Math.round(n * 100) / 100; }
 function parseInstNo(label) {
     const m = String(label).match(/^(\d+)(st|nd|rd|th)\s+Installment/i);
@@ -642,7 +653,7 @@ function contactToPurchaser(c) {
         isMinor:     String(getUF(c, C_TYPE)) === C_TYPE_MINOR,
         guardianName: getUF(c, C_GUARDIAN_NAME),
         ownership:   getUF(c, C_OWNERSHIP),
-        address:     getUF(c, C_ADDRESS),
+        address:     cleanAddress(getUF(c, C_ADDRESS)),
         pobox:       getUF(c, C_POBOX),
         uaeResident: UAE_RESIDENT_MAP[getUF(c, C_UAE_RESIDENT)] || '',
         city:        getUF(c, C_CITY),
@@ -658,7 +669,7 @@ function companyToObj(co) {
     if (!co) return null;
     return {
         name:           co.TITLE || '',
-        address:        getUF(co, CO_ADDRESS),
+        address:        cleanAddress(getUF(co, CO_ADDRESS)),
         city:           getUF(co, CO_CITY),
         country:        enumVal(CO_COUNTRY, getUF(co, CO_COUNTRY)),
         mobile:         getMulti(co, 'PHONE'),
