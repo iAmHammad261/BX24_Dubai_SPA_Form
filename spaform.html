@@ -249,6 +249,52 @@ function arLookup(table, en) {
     return table[k] || en;   // fall back to English when not in the lookup
 }
 
+// ── Live EN→AR translation (via /translate proxy in server.js) ──
+let AR_TR = {};   // english value -> arabic
+async function translateBatch(texts) {
+    const uniq = [], seen = {};
+    texts.forEach(function(t) {
+        const k = String(t == null ? '' : t).trim();
+        if (!k || seen[k]) return;
+        if (k === 'N/A' || !/[A-Za-z]/.test(k)) return;   // skip N/A, numbers, dates, symbols
+        if (AR_TR[k] !== undefined) return;
+        seen[k] = 1; uniq.push(k);
+    });
+    if (!uniq.length) return;
+    try {
+        const resp = await fetch('/translate', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ texts: uniq })
+        });
+        const data = await resp.json();
+        const tr = (data && data.translations) || {};
+        Object.keys(tr).forEach(function(k) { AR_TR[k] = tr[k] || ''; });
+    } catch (e) { console.warn('[SPA] translate failed:', e); }
+}
+// Arabic for a text value: API translation -> lookup table -> original (Latin) last resort
+function arText(en, table) {
+    const k = String(en == null ? '' : en).trim();
+    if (!k) return '';
+    if (k === 'N/A') return 'N/A';
+    if (AR_TR[k]) return AR_TR[k];
+    if (table) { const l = arLookup(table, en); if (l && l !== en) return l; }
+    return en;
+}
+// Gather every translatable text value for one batch request
+function collectTranslatable(d, enMap) {
+    const out = [];
+    (d.purchasers || []).forEach(function(p) {
+        out.push(p.name, p.address, p.city, p.country, p.nationality, p.guardianName);
+    });
+    if (d.company) {
+        const co = d.company;
+        out.push(co.name, co.address, co.city, co.country, co.authority, co.repName);
+    }
+    out.push(enMap['{UfCrm151778950656579}']);   // nominee name
+    out.push(enMap['{UfCrm151778950670679}']);   // nominee nationality
+    return out;
+}
+
 /* ════════════════ STATE ════════════════ */
 let currentDealId = null;
 let SPA_DATA = null;
@@ -814,7 +860,8 @@ async function loadUnitImage(pid, product) {
 /* ════════════════ PLACEHOLDER MAP ════════════════ */
 const I_CITY = 'UfCrm151776677095087', I_COUNTRY = 'UfCrm151776677134809',
       I_NAT = 'UfCrm151776676964285', I_NOM_NAT = 'UfCrm151778950670679',
-      I_PAYMODE = 'UfCrm151778950818534', I_PRICE_WORDS = 'UfCrm151778950758041';
+      I_PAYMODE = 'UfCrm151778950818534', I_PRICE_WORDS = 'UfCrm151778950758041',
+      I_NOM_NAME = 'UfCrm151778950656579';
 
 function buildEnMap(d) {
     const deal = d.deal, c = d.buyer;
@@ -853,10 +900,11 @@ function buildEnMap(d) {
 function arValueFor(inner, enMap, d) {
     const en = enMap['{' + inner + '}'];
     switch (inner) {
-        case I_CITY:        return arLookup(CITY_AR, en);
-        case I_COUNTRY:     return arLookup(COUNTRY_AR, en);
+        case I_CITY:        return arText(en, CITY_AR);
+        case I_COUNTRY:     return arText(en, COUNTRY_AR);
         case I_NAT:
-        case I_NOM_NAT:     return arLookup(NAT_AR, en);
+        case I_NOM_NAT:     return arText(en, NAT_AR);
+        case I_NOM_NAME:    return arText(en);
         case I_PAYMODE:     return arLookup(PAYMODE_AR, en);
         case I_PRICE_WORDS: return numToWordsAR(d.net) + ' درهم إماراتي فقط لا غير';
         default:            return arabicDigits(en);   // numbers/dates -> Arabic numerals; text unchanged
@@ -875,6 +923,11 @@ async function renderSpa(d) {
         throw e;
     }
     const enMap = buildEnMap(d);
+
+    // Translate text values to Arabic (name/address/city/country/nationality/company/nominee)
+    setStatus('Translating to Arabic…');
+    await translateBatch(collectTranslatable(d, enMap));
+    setStatus('Building document…');
 
     // 1) Arabic markers  {AR::inner}
     let out = skeleton.replace(/\{AR::([A-Za-z0-9_]+)\}/g, function(_, inner) {
@@ -950,18 +1003,18 @@ function buyerRowsHtml(d) {
     if (d.isCompany && d.company) {
         const co = d.company;
         let r = row('Purchaser Type', 'Company', 'شركة', 'نوع المشتري', true) +
-            row('Company Name', co.name, co.name, 'اسم الشركة', true) +
-            row('Address', co.address, co.address, 'العنوان') +
-            row('City', co.city, arLookup(CITY_AR, co.city), 'مدينة') +
-            row('Country', co.country, arLookup(COUNTRY_AR, co.country), 'البلد') +
+            row('Company Name', co.name, arText(co.name), 'اسم الشركة', true) +
+            row('Address', co.address, arText(co.address), 'العنوان') +
+            row('City', co.city, arText(co.city, CITY_AR), 'مدينة') +
+            row('Country', co.country, arText(co.country, COUNTRY_AR), 'البلد') +
             row('Phone/Mobile', co.mobile, co.mobile, 'الهاتف') +
             row('Email', co.email, co.email, 'الايميل') +
             row('Dubai Incorporated', co.uaeIncorp,
                 (co.uaeIncorp === 'Yes' ? 'نعم' : (co.uaeIncorp === 'No' ? 'لا' : '')), 'مؤسسة في دبي') +
             // Authority, Representor and Trade License now always show (no Yes/No gating)
-            row('Issuing Authority', co.authority, co.authority, 'جهة الإصدار') +
+            row('Issuing Authority', co.authority, arText(co.authority), 'جهة الإصدار') +
             row('Representor', '', '', 'الممثل', true) +
-            row('Representor\u2019s Name', co.repName, co.repName, 'اسم الممثل') +
+            row('Representor\u2019s Name', co.repName, arText(co.repName), 'اسم الممثل') +
             row('Representor Passport No.', co.repPassport, arabicDigits(co.repPassport), 'رقم جواز سفر الممثل') +
             row('Representor Passport Exp.', co.repPassportExp, arabicDigits(co.repPassportExp), 'تاريخ انتهاء جواز سفر الممثل') +
             row('Trade License No.', co.license, arabicDigits(co.license), 'رقم الرخصة التجارية') +
@@ -981,32 +1034,32 @@ function buyerRowsHtml(d) {
             // then the remaining fields relabelled as the Guardian's (English + Arabic).
             h += row(multi ? ('Purchaser ' + n + ' (Minor)') : 'Purchaser (Minor)', '', '',
                      multi ? ('المشتري ' + n + ' (قاصر)') : 'المشتري (قاصر)', true);
-            h += row('Buyer Name', p.name, arabicDigits(p.name), 'اسم المشتري', true);
-            h += row('Guardian\u2019s Name', p.guardianName, arabicDigits(p.guardianName), 'اسم ولي الأمر', true);
-            h += row('Guardian\u2019s Address', p.address, arabicDigits(p.address), 'عنوان ولي الأمر');
+            h += row('Buyer Name', p.name, arText(p.name), 'اسم المشتري', true);
+            h += row('Guardian\u2019s Name', p.guardianName, arText(p.guardianName), 'اسم ولي الأمر', true);
+            h += row('Guardian\u2019s Address', p.address, arText(p.address), 'عنوان ولي الأمر');
             h += row('Guardian\u2019s P.O. Box', p.pobox, arabicDigits(p.pobox), 'صندوق بريد ولي الأمر');
             h += row('Guardian\u2019s UAE Resident', p.uaeResident,
                      (p.uaeResident === 'Yes' ? 'نعم' : (p.uaeResident === 'No' ? 'لا' : '')), 'ولي الأمر مقيم في الإمارات');
-            h += row('Guardian\u2019s City', p.city, arLookup(CITY_AR, p.city), 'مدينة ولي الأمر');
+            h += row('Guardian\u2019s City', p.city, arText(p.city, CITY_AR), 'مدينة ولي الأمر');
             h += row('Guardian\u2019s Phone/Mobile', p.phone, arabicDigits(p.phone), 'هاتف ولي الأمر');
             h += row('Guardian\u2019s Email', p.email, p.email, 'البريد الإلكتروني لولي الأمر');
-            h += row('Guardian\u2019s Country', p.country, arLookup(COUNTRY_AR, p.country), 'بلد ولي الأمر');
-            h += row('Guardian\u2019s Nationality', p.nationality, arLookup(NAT_AR, p.nationality), 'جنسية ولي الأمر');
+            h += row('Guardian\u2019s Country', p.country, arText(p.country, COUNTRY_AR), 'بلد ولي الأمر');
+            h += row('Guardian\u2019s Nationality', p.nationality, arText(p.nationality, NAT_AR), 'جنسية ولي الأمر');
             h += row('Guardian\u2019s Passport No.', p.passport, arabicDigits(p.passport), 'رقم جواز سفر ولي الأمر');
             h += row('Guardian\u2019s Exp. Date', p.exp, arabicDigits(p.exp), 'تاريخ انتهاء جواز سفر ولي الأمر');
             return;
         }
         if (multi) h += row('Purchaser ' + n, '', '', 'المشتري ' + n, true);
-        h += row('Buyer Name', p.name, arabicDigits(p.name), 'اسم المشتري', true);
-        h += row('Address', p.address, arabicDigits(p.address), 'العنوان');
+        h += row('Buyer Name', p.name, arText(p.name), 'اسم المشتري', true);
+        h += row('Address', p.address, arText(p.address), 'العنوان');
         h += row('P.O. Box', p.pobox, arabicDigits(p.pobox), 'رقم صندوق البريد');
         h += row('UAE Resident', p.uaeResident,
                  (p.uaeResident === 'Yes' ? 'نعم' : (p.uaeResident === 'No' ? 'لا' : '')), 'مقيم في الإمارات');
-        h += row('City', p.city, arLookup(CITY_AR, p.city), 'مدينة');
+        h += row('City', p.city, arText(p.city, CITY_AR), 'مدينة');
         h += row('Phone/Mobile', p.phone, arabicDigits(p.phone), 'الهاتف');
         h += row('Email', p.email, p.email, 'الايميل');
-        h += row('Country', p.country, arLookup(COUNTRY_AR, p.country), 'البلد');
-        h += row('Nationality', p.nationality, arLookup(NAT_AR, p.nationality), 'الجنسية');
+        h += row('Country', p.country, arText(p.country, COUNTRY_AR), 'البلد');
+        h += row('Nationality', p.nationality, arText(p.nationality, NAT_AR), 'الجنسية');
         h += row('Passport No.', p.passport, arabicDigits(p.passport), 'رقم جواز السفر');
         h += row('Exp. Date', p.exp, arabicDigits(p.exp), 'تاريخ الانتهاء');
     });
