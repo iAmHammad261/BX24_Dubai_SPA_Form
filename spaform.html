@@ -124,6 +124,7 @@ const ZONE_MAP        = { '1359': 'Free Zone', '1361': 'Main Land Company' };
 
 // Product (catalog) property IDs
 const PROD_TYPE = 177;   // Unit Type
+const PROD_UNITNO = 107; // Unit No (property_107_text, e.g. "101")
 const PROD_AREA = 259;   // Area (per client: use 259, ignore template's 113)
 const PROD_FLOOR = 261;  // Floor
 const SQFT_TO_SQM = 0.09290304;   // area is stored in SqFt; SPA shows SqM
@@ -435,6 +436,17 @@ function getProp(product, id) {
     }
     return '';
 }
+
+// Like getProp, but prefers the property's *_text value (Unit No = property_107_text).
+function getPropText(product, id) {
+    if (!product) return '';
+    let v = product['property_' + id + '_text'];
+    if (v === undefined || v === null) v = product['property' + id + '_text'];
+    if (Array.isArray(v)) v = v[0];
+    if (v !== undefined && v !== null && v !== '') return v;
+    return getProp(product, id);
+}  
+  
 function ordinal(n) { const s = ['th','st','nd','rd'], v = n % 100; return n + (s[(v - 20) % 10] || s[v] || s[0]); }
 
 // Bitrix address fields store components joined by "|;|" with a trailing numeric
@@ -952,7 +964,7 @@ function buildEnMap(d) {
     m['{UfCrm151778950670679}']        = naIfEmpty(enumVal(C_NOM_NAT, field(c, deal, C_NOM_NAT))); // Nominee Nationality
     m['{UfCrm151778950686842}']        = naIfEmpty(field(c, deal, C_NOM_PASS));          // Nominee Passport
     m['{UfCrm151778950699925}']        = naIfEmpty(maybeDate(field(c, deal, C_NOM_EXP))); // Nominee Exp
-    m['{ProductsProductTitle}']        = d.unitName;                          // Unit No
+    m['{ProductsProductTitle}']        = getPropText(d.product, PROD_UNITNO) || d.unitName;  // Unit No (property 107)
     m['{UfCrm151778950723706}']        = field(c, deal, D_PARKING);           // Parking
     m['{ProductsProductProperty113}']  = sqftToSqm(getProp(d.product, PROD_AREA)); // Area in SqM
     m['{ProductsProductProperty177}']  = getProp(d.product, PROD_TYPE);        // Unit Type (property 177)
