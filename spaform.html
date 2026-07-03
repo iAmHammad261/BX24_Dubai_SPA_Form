@@ -72,7 +72,17 @@
     <span class="status" id="status">Loading…</span>
     <button id="attachBtn" disabled onclick="attachToDeal()">Attach to Deal</button>
   </div>
-  <div class="page"><img id="coverPrev" src="cover.png" alt="Cover page"><div id="spaRoot"></div></div>
+  <div class="page">
+    
+    <div id="errorBox" style="display:none; background: #fee2e2; border: 1px solid #ef4444; color: #b91c1c; padding: 16px; margin-bottom: 20px; border-radius: 6px;">
+        <strong style="display:block; margin-bottom: 8px; font-size: 14px;">Cannot Generate SPA — Missing Required Fields:</strong>
+        <p style="margin: 0 0 10px 0; font-size: 12px;">Please fill out the following fields in the CRM, then click <b>Reload Data</b> above.</p>
+        <ul id="errorList" style="margin: 0; padding-left: 24px; font-size: 13px; line-height: 1.6;"></ul>
+    </div>
+    
+    <img id="coverPrev" src="cover.png" alt="Cover page">
+    <div id="spaRoot"></div>
+  </div>
 
 <script>
 /* ════════════════ CONFIG ════════════════ */
@@ -173,7 +183,7 @@ const PRIVATE_POOL_FEE = 100000; // AED, shown when Private Pool is on (same as 
 /* ════════════════ INSTALLMENT SCHEDULES (identical to Booking Form) ════════════════ */
 const SCHEDULES = {
     '60_40': [
-        { label: 'Downpayment',     pct: 20, when: { type: 'booking', months: 0 } },
+        { label: 'Downpayment',    pct: 20, when: { type: 'booking', months: 0 } },
         { label: '1st Installment', pct: 5,  when: { type: 'booking', months: 3 } },
         { label: '2nd Installment', pct: 5,  when: { type: 'booking', months: 6 } },
         { label: '3rd Installment', pct: 5,  when: { type: 'booking', months: 9 } },
@@ -368,6 +378,108 @@ function arText(en, table) {
 /* ════════════════ STATE ════════════════ */
 let currentDealId = null;
 let SPA_DATA = null;
+
+/* ════════════════ VALIDATION ════════════════ */
+const REQUIRED_LABELS = {
+    deal_paymentMode: 'Deal: Payment Mode',
+    deal_bank: 'Deal: Bank',
+    deal_completion: 'Deal: Anticipated Completion Date',
+    deal_paymentPlan: 'Deal: Payment Plan (Missing or Not Configured)',
+    product_unitNo: 'Unit/Product: Unit Number',
+    product_area: 'Unit/Product: Area (SqFt/SqM)',
+    contact_name: 'Name',
+    contact_address: 'Address',
+    contact_city: 'City',
+    contact_country: 'Country',
+    contact_nationality: 'Nationality',
+    contact_passport: 'Passport No.',
+    contact_exp: 'Passport Expiry Date',
+    company_name: 'Company Name',
+    company_address: 'Company Address',
+    company_city: 'Company City',
+    company_country: 'Company Country',
+    company_authority: 'Issuing Authority',
+    company_license: 'Trade License No.',
+    company_repName: 'Representor Name',
+    company_repPassport: 'Representor Passport No.'
+};
+
+function validateSPAData(d) {
+    let errors = [];
+
+    // 1. Check Deal Fields
+    if (!d.deal[D_PAYMODE]) errors.push(REQUIRED_LABELS.deal_paymentMode);
+    if (!d.deal[D_BANK]) errors.push(REQUIRED_LABELS.deal_bank);
+    if (!d.deal[D_COMPLETION]) errors.push(REQUIRED_LABELS.deal_completion);
+    if (!d.pj || Object.keys(d.pj).length === 0) errors.push(REQUIRED_LABELS.deal_paymentPlan);
+
+    // 2. Check Product Fields
+    if (!d.unitName && !getPropText(d.product, PROD_UNITNO)) errors.push(REQUIRED_LABELS.product_unitNo);
+    if (!getProp(d.product, PROD_AREA)) errors.push(REQUIRED_LABELS.product_area);
+
+    // 3. Check Buyer Fields (Company vs Individual)
+    if (d.isCompany) {
+        const co = d.company;
+        if (!co.name) errors.push(REQUIRED_LABELS.company_name);
+        if (!co.address) errors.push(REQUIRED_LABELS.company_address);
+        if (!co.city) errors.push(REQUIRED_LABELS.company_city);
+        if (!co.country) errors.push(REQUIRED_LABELS.company_country);
+        if (!co.authority) errors.push(REQUIRED_LABELS.company_authority);
+        if (!co.license) errors.push(REQUIRED_LABELS.company_license);
+        if (!co.repName) errors.push(REQUIRED_LABELS.company_repName);
+        if (!co.repPassport) errors.push(REQUIRED_LABELS.company_repPassport);
+    } else {
+        if (!d.purchasers || d.purchasers.length === 0) {
+            errors.push('No Contacts linked to the Deal.');
+        } else {
+            d.purchasers.forEach(function(p, idx) {
+                let prefix = d.purchasers.length > 1 ? 'Purchaser ' + (idx + 1) + ' - ' : 'Purchaser - ';
+                
+                if (p.isMinor) {
+                    prefix = d.purchasers.length > 1 ? 'Purchaser ' + (idx + 1) + ' (Guardian) - ' : 'Guardian - ';
+                    if (!p.guardianName) errors.push(prefix + "Guardian's Name");
+                } else {
+                    if (!p.name) errors.push(prefix + REQUIRED_LABELS.contact_name);
+                }
+
+                if (!p.address) errors.push(prefix + REQUIRED_LABELS.contact_address);
+                if (!p.city) errors.push(prefix + REQUIRED_LABELS.contact_city);
+                if (!p.country) errors.push(prefix + REQUIRED_LABELS.contact_country);
+                if (!p.nationality) errors.push(prefix + REQUIRED_LABELS.contact_nationality);
+                if (!p.passport) errors.push(prefix + REQUIRED_LABELS.contact_passport);
+                if (!p.exp) errors.push(prefix + REQUIRED_LABELS.contact_exp);
+            });
+        }
+    }
+    return errors;
+}
+
+function showErrors(errors) {
+    const errBox = document.getElementById('errorBox');
+    const errList = document.getElementById('errorList');
+    const btn = document.getElementById('attachBtn');
+    
+    errList.innerHTML = '';
+    errors.forEach(function(err) {
+        const li = document.createElement('li');
+        li.textContent = err;
+        errList.appendChild(li);
+    });
+
+    errBox.style.display = 'block';
+    document.getElementById('spaRoot').style.display = 'none';
+    document.getElementById('coverPrev').style.display = 'none';
+
+    setStatus('Missing required data. Please fix in CRM and reload.', true);
+
+    btn.textContent = 'Reload Data';
+    btn.disabled = false;
+    btn.onclick = function() {
+        btn.disabled = true;
+        btn.textContent = 'Loading...';
+        loadAll(); 
+    };
+}
 
 /* ════════════════ HELPERS (shared with Booking Form) ════════════════ */
 function callBX(method, params) {
@@ -732,8 +844,25 @@ async function loadAll() {
     ]);
 
     SPA_DATA = buildContext(deal, contacts, company, product, unitName, pj, plan, unitImage);
+    
+    // --- NEW VALIDATION GATEKEEPER ---
+    const validationErrors = validateSPAData(SPA_DATA);
+    if (validationErrors.length > 0) {
+        showErrors(validationErrors);
+        return; 
+    }
+    // ---------------------------------
+
+    document.getElementById('errorBox').style.display = 'none';
+    document.getElementById('spaRoot').style.display = 'block';
+    document.getElementById('coverPrev').style.display = 'block';
+
+    const attachBtn = document.getElementById('attachBtn');
+    attachBtn.onclick = attachToDeal;
+    attachBtn.textContent = 'Attach to Deal';
+
     await renderSpa(SPA_DATA);
-    document.getElementById('attachBtn').disabled = false;
+    attachBtn.disabled = false;
     setStatus('Ready — review, then Attach to Deal.');
     notifyResize();
 }
