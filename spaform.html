@@ -191,7 +191,7 @@ const SCHEDULES = {
         { label: '5th Installment', pct: 5,  when: { type: 'booking', months: 15 } },
         { label: '6th Installment', pct: 5,  when: { type: 'booking', months: 18 } },
         { label: '7th Installment', pct: 5,  when: { type: 'booking', months: 21 } },
-        { label: 'Completion',      pct: 40, when: { type: 'completion' } }
+        { label: '8th Installment', pct: 40, when: { type: 'completion' } }
     ],
     '3_years': [
         { label: 'Downpayment',      pct: 20, when: { type: 'booking', months: 0 } },
@@ -641,7 +641,9 @@ function baseSchedule(plan, pj, booking, net) {
         const dps = new Date(pj.downpaymentStartDate);
         if (!isNaN(dps.getTime())) booking = dps;   // standard plans anchor to the chosen start date
     }
-    const completion = addMonths(booking, HANDOVER_MONTHS);
+      const completion = (plan === '60_40')
+        ? new Date(2028, 5, 30)          
+        : addMonths(booking, HANDOVER_MONTHS);
     function dateFor(when) {
         if (when.type === 'booking')    return addMonths(booking, when.months);
         if (when.type === 'completion') return completion;
