@@ -641,7 +641,7 @@ function baseSchedule(plan, pj, booking, net) {
         const dps = new Date(pj.downpaymentStartDate);
         if (!isNaN(dps.getTime())) booking = dps;   // standard plans anchor to the chosen start date
     }
-      const completion = (plan === '60_40')
+      const completion = (plan === '60_40' || plan === '3_years' || plan === '5_years' )
         ? new Date(2028, 5, 30)          
         : addMonths(booking, HANDOVER_MONTHS);
     function dateFor(when) {
