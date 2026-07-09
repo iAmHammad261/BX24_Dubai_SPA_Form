@@ -105,7 +105,8 @@ const C_NOM_NAT     = 'UF_CRM_1782082822843';   // dropdown
 const C_NOM_PASS    = 'UF_CRM_1781648170181';
 const C_NOM_EXP     = 'UF_CRM_1781467149267';
 const C_NAME_AR     = 'UF_CRM_1783400109072';
-const C_ADDRESS_AR  = 'UF_CRM_1783400263282'
+const C_ADDRESS_AR  = 'UF_CRM_1783400263282';
+const C_BUYER_SHARE = 'UF_CRM_1782163950371';
 
 
 // Deal fields
@@ -918,6 +919,7 @@ function contactToPurchaser(c) {
     return {
         name:        name,
         nameAr:     getUF(c, C_NAME_AR),
+        buyerShare:  getUF(c, C_BUYER_SHARE), 
         isMinor:     String(getUF(c, C_TYPE)) === C_TYPE_MINOR,
         guardianName: getUF(c, C_GUARDIAN_NAME),
         address:     cleanAddress(getUF(c, C_ADDRESS)),
@@ -1263,6 +1265,7 @@ function buyerRowsHtml(d) {
         }
         if (multi) h += row('Purchaser ' + n, '', '', 'المشتري ' + n, true);
         h += row('Buyer Name', p.name, (p.nameAr), 'اسم المشتري', true);
+        h += row('Ownership %', (p.buyerShare ? p.buyerShare + '%' : ''), arabicDigits(p.buyerShare) + (p.buyerShare ? '٪' : ''), 'حصة المشتري');
         h += row('Address', p.address, (p.addressAr), 'العنوان');
         h += row('P.O. Box', p.pobox, arabicDigits(p.pobox), 'رقم صندوق البريد');
         h += row('UAE Resident', p.uaeResident,
