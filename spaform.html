@@ -104,6 +104,9 @@ const C_NOM_NAME    = 'UF_CRM_1781467071988';
 const C_NOM_NAT     = 'UF_CRM_1782082822843';   // dropdown
 const C_NOM_PASS    = 'UF_CRM_1781648170181';
 const C_NOM_EXP     = 'UF_CRM_1781467149267';
+const C_NAME_AR     = 'UF_CRM_1783400109072';
+const C_ADDRESS_AR  = 'UF_CRM_1783400263282'
+
 
 // Deal fields
 const D_PARKING     = 'UF_CRM_1781648187687';
@@ -914,9 +917,11 @@ function contactToPurchaser(c) {
     const name = [c.NAME, c.SECOND_NAME, c.LAST_NAME].filter(Boolean).join(' ').trim();
     return {
         name:        name,
+        nameAr:     getUF(c, C_NAME_AR),
         isMinor:     String(getUF(c, C_TYPE)) === C_TYPE_MINOR,
         guardianName: getUF(c, C_GUARDIAN_NAME),
         address:     cleanAddress(getUF(c, C_ADDRESS)),
+        addressAr:   cleanAddress(getUF(c, C_ADDRESS_AR)),
         pobox:       getUF(c, C_POBOX),
         uaeResident: UAE_RESIDENT_MAP[getUF(c, C_UAE_RESIDENT)] || '',
         city:        getUF(c, C_CITY),
@@ -1257,8 +1262,8 @@ function buyerRowsHtml(d) {
             return;
         }
         if (multi) h += row('Purchaser ' + n, '', '', 'المشتري ' + n, true);
-        h += row('Buyer Name', p.name, arText(p.name), 'اسم المشتري', true);
-        h += row('Address', p.address, arText(p.address), 'العنوان');
+        h += row('Buyer Name', p.name, (p.nameAr), 'اسم المشتري', true);
+        h += row('Address', p.address, (p.addressAr), 'العنوان');
         h += row('P.O. Box', p.pobox, arabicDigits(p.pobox), 'رقم صندوق البريد');
         h += row('UAE Resident', p.uaeResident,
                  (p.uaeResident === 'Yes' ? 'نعم' : (p.uaeResident === 'No' ? 'لا' : '')), 'مقيم في الإمارات');
