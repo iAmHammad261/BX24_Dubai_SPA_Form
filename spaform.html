@@ -1354,10 +1354,14 @@ async function attachToDeal() {
                      '<style>body{margin:0;padding:0;background:#fff;}</style>' +
                      '</head><body>' + body + '</body></html>';
 
+        const purchaserCount = (SPA_DATA && !SPA_DATA.isCompany && SPA_DATA.purchasers)
+            ? SPA_DATA.purchasers.length : 1;
+
+
         const resp = await fetch('/render-pdf', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ html: html, spsl: spsl })
+            body: JSON.stringify({ html: html, spsl: spsl, purchaserCount: purchaserCount })
         });
         if (!resp.ok) {
             const msg = await resp.text().catch(function() { return ''; });

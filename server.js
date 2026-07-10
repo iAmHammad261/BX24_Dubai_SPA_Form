@@ -59,12 +59,15 @@ function fileDataUrl(file, mime) {
 // renders it with real Chrome pagination + running header/footer, prepends the
 // cover page, and returns the finished PDF as base64.
 app.post('/render-pdf', async (req, res) => {
-    const { html, spsl } = req.body || {};
+    const { html, spsl, purchaserCount } = req.body || {};
     if (!html) return res.status(400).json({ error: 'missing html' });
 
     const ref   = String(spsl || '').replace(/[<>&"]/g, '');
     const logoL = fileDataUrl('logo-pci.png', 'image/png');
     const logoR = fileDataUrl('logo-southlofts.png', 'image/png');
+
+    const initialsLabel = (Number(purchaserCount) > 1) ? 'Buyers Initials' : 'Buyer Initial';
+
 
     let browser;
     try {
@@ -93,7 +96,7 @@ app.post('/render-pdf', async (req, res) => {
         const footerTemplate =
             '<div style="width:100%; box-sizing:border-box; padding:0 10mm; font-family:Arial,sans-serif; font-size:9px; display:flex; justify-content:space-between;">' +
               '<span>Page <span class="pageNumber"></span></span>' +
-              '<span>Buyer Initials: __________</span>' +
+              '<span>' + initialsLabel + ': __________</span>' +
             '</div>';
 
         const bodyPdf = await page.pdf({
