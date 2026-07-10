@@ -908,6 +908,25 @@ async function loadAll() {
     notifyResize();
 }
 
+function schedulePurchaserSignaturesHtml(d) {
+    if (d.isCompany) {
+        return '<div class="sig-final-block sig2-block">' +
+                    '<div class="sig-final-line">&nbsp;</div>' +
+                    '<p class="sig-final-label">PURCHASER</p>' +
+                '</div>';
+    }
+    const ps = (d.purchasers && d.purchasers.length) ? d.purchasers : [{}];
+    let html = '';
+    ps.forEach(function(p, idx) {
+        const n = idx + 1;
+        html += '<div class="sig-final-block sig2-block">' +
+                    '<div class="sig-final-line">&nbsp;</div>' +
+                    '<p class="sig-final-label">Purchaser ' + n + '</p>' +
+                '</div>';
+    });
+    return html;
+}
+
 async function loadContacts() {
     let items = [];
     try {
@@ -1190,7 +1209,7 @@ async function renderSpa(d) {
     out = out.split('{{BUYER_ROWS}}').join(buyerRowsHtml(d));
 
     out = out.split('{{PURCHASER_SIGNATURES_FINAL}}').join(purchaserSignaturesFinalHtml(d));
-    
+
     out = out.split('{{PURCHASER_SIGNATURES_SCHEDULE}}').join(schedulePurchaserSignaturesHtml(d));
 
     // 2c) Unit layout image in Schedule B (falls back to the original caption)
