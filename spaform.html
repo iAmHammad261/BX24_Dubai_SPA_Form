@@ -204,7 +204,7 @@ const SCHEDULES = {
         { label: '3rd Installment',  pct: 10, when: { type: 'booking', months: 13 } },
         { label: '4th Installment',  pct: 5,  when: { type: 'booking', months: 17 } },
         { label: '5th Installment',  pct: 5,  when: { type: 'booking', months: 21 } },
-        { label: '6th Installment(Upon Completion)',  pct: 10, when: { type: 'completion' } },
+        { label: '6th Installment',  pct: 10, when: { type: 'completion' } },
         { label: '7th Installment',  pct: 3,  when: { type: 'handover', months: 3 } },
         { label: '8th Installment',  pct: 3,  when: { type: 'handover', months: 6 } },
         { label: '9th Installment',  pct: 3,  when: { type: 'handover', months: 9 } },
@@ -225,7 +225,7 @@ const SCHEDULES = {
         { label: '3rd Installment',  pct: 10, when: { type: 'booking', months: 13 } },
         { label: '4th Installment',  pct: 5,  when: { type: 'booking', months: 17 } },
         { label: '5th Installment',  pct: 5,  when: { type: 'booking', months: 21 } },
-        { label: '6th Installment(Upon Completion)',  pct: 10, when: { type: 'completion' } },
+        { label: '6th Installment',  pct: 10, when: { type: 'completion' } },
         { label: '7th Installment',  pct: 4,  when: { type: 'handover', months: 6 } },
         { label: '8th Installment',  pct: 4,  when: { type: 'handover', months: 12 } },
         { label: '9th Installment',  pct: 4,  when: { type: 'handover', months: 18 } },
@@ -1252,8 +1252,6 @@ function buyerRowsHtml(d) {
             h += row('Guardian\u2019s Name', p.guardianName, arText(p.guardianName), 'اسم ولي الأمر', true);
             h += row('Guardian\u2019s Address', p.address, arText(p.address), 'عنوان ولي الأمر');
             h += row('Guardian\u2019s P.O. Box', p.pobox, arabicDigits(p.pobox), 'صندوق بريد ولي الأمر');
-            h += row('Guardian\u2019s UAE Resident', p.uaeResident,
-                     (p.uaeResident === 'Yes' ? 'نعم' : (p.uaeResident === 'No' ? 'لا' : '')), 'ولي الأمر مقيم في الإمارات');
             h += row('Guardian\u2019s City', p.city, arText(p.city, CITY_AR), 'مدينة ولي الأمر');
             h += row('Guardian\u2019s Phone/Mobile', p.phone, arabicDigits(p.phone), 'هاتف ولي الأمر');
             h += row('Guardian\u2019s Email', p.email, p.email, 'البريد الإلكتروني لولي الأمر');
@@ -1268,8 +1266,6 @@ function buyerRowsHtml(d) {
         h += row('Ownership %', (p.buyerShare ? p.buyerShare + '%' : ''), arabicDigits(p.buyerShare) + (p.buyerShare ? '٪' : ''), 'حصة المشتري');
         h += row('Address', p.address, (p.addressAr), 'العنوان');
         h += row('P.O. Box', p.pobox, arabicDigits(p.pobox), 'رقم صندوق البريد');
-        h += row('UAE Resident', p.uaeResident,
-                 (p.uaeResident === 'Yes' ? 'نعم' : (p.uaeResident === 'No' ? 'لا' : '')), 'مقيم في الإمارات');
         h += row('City', p.city, arText(p.city, CITY_AR), 'مدينة');
         h += row('Phone/Mobile', p.phone, arabicDigits(p.phone), 'الهاتف');
         h += row('Email', p.email, p.email, 'الايميل');
