@@ -65,10 +65,10 @@
   #spaRoot .unit-layout img { display: block; max-width: 100%; max-height: 150mm;
                               height: auto; margin: 0 auto; border: 1px solid #555; }
     /* ── Final-page purchaser signature grid (2 cols, line above label) ── */
-#spaRoot .sig-final-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 30px; margin: 20px 0 14px; }
-#spaRoot .sig-final-grid .sig-final-block { }
-#spaRoot .sig-final-grid .sig-final-line { border-top: 1px solid #000; height: 20px; }
-#spaRoot .sig-final-grid .sig-final-label { font-weight: 700; margin: 2px 0 0; }
+#spaRoot .sig-final-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 34px 30px; margin: 20px 0 20px; }
+#spaRoot .sig-final-grid .sig-final-block { text-align: center; }
+#spaRoot .sig-final-grid .sig-final-line { border-top: 1px solid #000; height: 40px; }
+#spaRoot .sig-final-grid .sig-final-label { font-weight: 700; margin: 2px 0 0; text-align: center; }
 
 </style>
 </head>
@@ -287,7 +287,7 @@ function purchaserSignaturesFinalHtml(d) {
         const n = idx + 1;
         html += '<div class="sig-final-block">' +
                     '<div class="sig-final-line">&nbsp;</div>' +
-                    '<p class="sig-final-label">Purchaser ' + n + '</p>' +
+                    '<p class="sig-final-label">Purchaser ' + n + ' Signature</p>' +
                 '</div>';
     });
     html += '</div>';
