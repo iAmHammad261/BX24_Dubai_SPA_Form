@@ -80,6 +80,11 @@
   margin: 2px 0 0;
 }
 
+#spaRoot .sig-decl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px 30px; margin: 14px 0; }
+#spaRoot .sig-decl-block { text-align: left; }
+#spaRoot .sig-decl-label { font-weight: 700; margin: 0 0 6px; }
+#spaRoot .sig-decl-line { margin: 0; }
+
 </style>
 </head>
 <body>
@@ -278,6 +283,28 @@ function arLookup(table, en) {
     const k = String(en == null ? '' : en).trim().toLowerCase();
     if (!k) return '';
     return table[k] || en;   // fall back to English when not in the lookup
+}
+
+function declarationPurchaserSignaturesHtml(d) {
+    if (d.isCompany) {
+        return '<div class="sig-decl-grid">' +
+                    '<div class="sig-decl-block">' +
+                        '<p class="sig-decl-label">PURCHASER</p>' +
+                        '<p class="sig-decl-line">Signed: ____________________</p>' +
+                    '</div>' +
+                '</div>';
+    }
+    const ps = (d.purchasers && d.purchasers.length) ? d.purchasers : [{}];
+    let html = '<div class="sig-decl-grid">';
+    ps.forEach(function(p, idx) {
+        const n = idx + 1;
+        html += '<div class="sig-decl-block">' +
+                    '<p class="sig-decl-label">Purchaser ' + n + '</p>' +
+                    '<p class="sig-decl-line">Signed: ____________________</p>' +
+                '</div>';
+    });
+    html += '</div>';
+    return html;
 }
 
 // Final execution page: signature line ABOVE the "Purchaser N" label,
@@ -1216,6 +1243,8 @@ async function renderSpa(d) {
     out = out.split('{{PURCHASER_SIGNATURES_FINAL}}').join(purchaserSignaturesFinalHtml(d));
 
     out = out.split('{{PURCHASER_SIGNATURES_SCHEDULE}}').join(schedulePurchaserSignaturesHtml(d));
+
+    out = out.split('{{PURCHASER_SIGNATURES_DECLARATION}}').join(declarationPurchaserSignaturesHtml(d));
 
     // 2c) Unit layout image in Schedule B (falls back to the original caption)
     const layoutHtml = d.unitImage
