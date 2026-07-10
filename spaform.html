@@ -70,10 +70,27 @@
 #spaRoot .sig-final-grid .sig-final-line { border-top: 1px solid #000; height: 3px; }
 #spaRoot .sig-final-grid .sig-final-label { font-weight: 700; margin: 2px 0 0; text-align: center; }
 
-#spaRoot .sig2-r { display: flex; flex-direction: row; justify-content: flex-end; flex-wrap: wrap; gap: 6px 20px; }
-#spaRoot .sig2-block { padding-top: 18px; text-align: center; }
-#spaRoot .sig2-block .sig-final-line { width: 70px; height: 2px; margin: 0 auto; }
-#spaRoot .sig2-block .sig-final-label { font-size: 10px; margin: 2px 0 0; }
+#spaRoot .sig2-r {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  justify-items: end;
+  gap: 10px 24px;
+  width: 260px;           
+}
+#spaRoot .sig2-block {
+  padding-top: 16px;
+  text-align: center;
+}
+#spaRoot .sig2-block .sig-final-line {
+  border-top: 1px solid #000;   
+  width: 70px;
+  height: 2px;
+  margin: 0 auto;
+}
+#spaRoot .sig2-block .sig-final-label {
+  font-size: 10px;
+  margin: 2px 0 0;
+}
 
 </style>
 </head>
