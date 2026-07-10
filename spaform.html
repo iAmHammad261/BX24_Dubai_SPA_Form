@@ -64,6 +64,12 @@
   #spaRoot .unit-layout { text-align: center; margin: 8px 0; page-break-inside: avoid; }
   #spaRoot .unit-layout img { display: block; max-width: 100%; max-height: 150mm;
                               height: auto; margin: 0 auto; border: 1px solid #555; }
+    /* ── Final-page purchaser signature grid (2 cols, line above label) ── */
+#spaRoot .sig-final-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 30px; margin: 8px 0 14px; }
+#spaRoot .sig-final-grid .sig-final-block { }
+#spaRoot .sig-final-grid .sig-final-line { border-top: 1px solid #000; height: 20px; }
+#spaRoot .sig-final-grid .sig-final-label { font-weight: 700; margin: 2px 0 0; }
+
 </style>
 </head>
 <body>
@@ -262,6 +268,30 @@ function arLookup(table, en) {
     const k = String(en == null ? '' : en).trim().toLowerCase();
     if (!k) return '';
     return table[k] || en;   // fall back to English when not in the lookup
+}
+
+// Final execution page: signature line ABOVE the "Purchaser N" label,
+// 2-column grid (1 top-left, 2 top-right, 3 bottom-left, 4 bottom-right...).
+function purchaserSignaturesFinalHtml(d) {
+    if (d.isCompany) {
+        return '<div class="sig-final-grid">' +
+                    '<div class="sig-final-block">' +
+                        '<div class="sig-final-line">&nbsp;</div>' +
+                        '<p class="sig-final-label">PURCHASER</p>' +
+                    '</div>' +
+                '</div>';
+    }
+    const ps = (d.purchasers && d.purchasers.length) ? d.purchasers : [{}];
+    let html = '<div class="sig-final-grid">';
+    ps.forEach(function(p, idx) {
+        const n = idx + 1;
+        html += '<div class="sig-final-block">' +
+                    '<div class="sig-final-line">&nbsp;</div>' +
+                    '<p class="sig-final-label">Purchaser ' + n + '</p>' +
+                '</div>';
+    });
+    html += '</div>';
+    return html;
 }
 
 // ── Offline phonetic transliteration (Latin -> Arabic by sound) ──
@@ -1153,6 +1183,8 @@ async function renderSpa(d) {
     });
     // 2b) Dynamic buyer rows (per purchaser, or company) — injected after token replacement
     out = out.split('{{BUYER_ROWS}}').join(buyerRowsHtml(d));
+
+    out = out.split('{{PURCHASER_SIGNATURES_FINAL}}').join(purchaserSignaturesFinalHtml(d));
 
     // 2c) Unit layout image in Schedule B (falls back to the original caption)
     const layoutHtml = d.unitImage
