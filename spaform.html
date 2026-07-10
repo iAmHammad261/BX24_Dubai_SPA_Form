@@ -1190,6 +1190,8 @@ async function renderSpa(d) {
     out = out.split('{{BUYER_ROWS}}').join(buyerRowsHtml(d));
 
     out = out.split('{{PURCHASER_SIGNATURES_FINAL}}').join(purchaserSignaturesFinalHtml(d));
+    
+    out = out.split('{{PURCHASER_SIGNATURES_SCHEDULE}}').join(schedulePurchaserSignaturesHtml(d));
 
     // 2c) Unit layout image in Schedule B (falls back to the original caption)
     const layoutHtml = d.unitImage
