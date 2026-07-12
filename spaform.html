@@ -50,7 +50,9 @@
   #spaRoot .sig2-l { text-align: left; }
   #spaRoot .sig2-r { text-align: right; }
   /* ── Lists: strip the stray bullet wrappers, keep the numbered list ── */
-  #spaRoot ul ul { padding-left: 24px; }
+  #spaRoot ul { list-style: none; margin: 4px 0; padding-left: 0; }
+  #spaRoot ul > li { padding-left: 0; }
+  #spaRoot ul ul { list-style: none; padding-left: 24px; }
   #spaRoot ol { margin: 4px 0; padding-left: 24px;  list-style: none;}
   #spaRoot li { margin: 3px 0; }
   /* ── Keep these blocks from splitting across pages ── */
