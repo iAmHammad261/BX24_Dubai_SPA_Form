@@ -1201,6 +1201,7 @@ function buildEnMap(d) {
     m['{UfCrm151778950723706}']        = field(c, deal, D_PARKING);           // Parking
     m['{ProductsProductProperty113}']  = sqftToSqm(getProp(d.product, PROD_AREA)); // Area in SqM
     m['{ProductsProductProperty177}']  = getProp(d.product, PROD_TYPE);        // Unit Type (property 177)
+    m['{UnitTypeScheduleB}']           = getProp(d.product, PROD_TYPE) + (d.furnished === 'Yes' ? ' (Furnished)' : ''); 
     m['{ProductsProductFloor}']        = getProp(d.product, PROD_FLOOR);        // Floor (Schedule B)
     m['{UfCrm151778950758041}']        = (numToWordsEN(d.net) + ' UAE Dirhams Only').trim();  // Total in words
     m['{UfCrm151778950818534}']        = resolvePayMode(field(c, deal, D_PAYMODE)); // Payment Mode (label)
