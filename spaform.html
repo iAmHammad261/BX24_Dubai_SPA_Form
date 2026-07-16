@@ -747,6 +747,7 @@ function baseSchedule(plan, pj, booking, net) {
                   locked: true, instNo: null }];
     }
     if (plan === 'custom') return buildCustomSchedule(pj, net);
+    if (plan === 'custom-2') return buildCustom02Schedule(pj, net);
     return [];
 }
 function buildCustomSchedule(pj, net) {
@@ -814,9 +815,37 @@ function buildCustomSchedule(pj, net) {
 
     return rows;
 }
+
+function buildCustom02Schedule(pj, net) {
+    const rows = Array.isArray(pj.rows) ? pj.rows : [];
+    let instNo = 0;
+
+    return rows.map(function(r) {
+        const type = r.installment || '';
+        const pct = (r.percentage !== undefined && r.percentage !== '') ? toNumber(r.percentage) : '';
+        const amt = toNumber(r.amount);
+        const d = r.paymentDate ? new Date(r.paymentDate) : null;
+        const validDate = d && !isNaN(d.getTime());
+        const dateStr = validDate ? fmtDate(d) : '\u2014';
+        const ts = validDate ? d.getTime() : null;
+
+        if (type === 'down_payment') {
+            return { label: 'Downpayment', pct: pct, amount: amt,
+                      dateStr: dateStr, ts: ts, locked: true, instNo: null };
+        }
+        if (type === 'balloon_payment') {
+            return { label: 'Balloon Payment', pct: pct, amount: amt,
+                      dateStr: dateStr, ts: ts, locked: true, instNo: null, balloon: true };
+        }
+        instNo++;
+        return { label: ordinal(instNo) + ' Installment', pct: pct, amount: amt,
+                  dateStr: dateStr, ts: ts, locked: false, instNo: instNo };
+    });
+}
+
 function buildSchedule(plan, pj, booking, net) {
     const rows = applyBalloons(baseSchedule(plan, pj, booking, net), pj);
-    if (plan === 'custom') return rows;   // custom keeps its fixed phase order (dates already ordered)
+    if (plan === 'custom' || plan === 'custom-2') return rows;   // custom keeps its fixed phase order (dates already ordered)
     return rows.map(function(r, i) { r._i = i; return r; })
         .sort(function(a, b) {
             const ta = (a.ts == null ? Number.MAX_SAFE_INTEGER : a.ts);
