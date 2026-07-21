@@ -147,12 +147,8 @@ app.post("/render-pdf", async (req, res) => {
       const cover = merged.addPage([A4W, A4H]);
       cover.drawImage(coverImg, { x: 0, y: 0, width: A4W, height: A4H });
     } catch (e) {
-      console.error(
-        "[SPA] cover embed failed:",
-        e.message,
-        "| path tried:",
-        path.join(__dirname, "cover.png"),
-      );
+      console.error("[SPA] cover embed failed. Full error:", e);
+      console.error("[SPA] error stack:", e && e.stack);
     }
 
     const bodyDoc = await PDFDocument.load(bodyPdf);
