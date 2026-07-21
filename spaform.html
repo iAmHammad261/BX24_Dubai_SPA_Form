@@ -145,6 +145,7 @@ const D_PAYMODE     = 'UF_CRM_1781467248957';
 const D_BANK        = 'UF_CRM_1781467271543';
 const D_COMPLETION  = 'UF_CRM_1781467301674';
 const D_WITNESS     = 'UF_CRM_1781467320678';
+const D_DOC_DATE    = 'UF_CRM_1784657498484'; 
 
 // UAE Resident (replaces Emirate) — same field/options as Booking Form
 const C_UAE_RESIDENT = 'UF_CRM_1781640051215';
@@ -1209,11 +1210,12 @@ const I_CITY = 'UfCrm151776677095087', I_COUNTRY = 'UfCrm151776677134809',
 function buildEnMap(d) {
     const deal = d.deal, c = d.buyer;
     const m = {};
-    m['{DocumentCreateTime}']          = fmtDate(d.today);
-    m['{DocumentCreateTimeAR}']        = arabicDigits(fmtDate(d.today));         // Arabic date cell
+    const docDate = maybeDate(getUF(deal, D_DOC_DATE)) || fmtDate(d.today); 
+    m['{DocumentCreateTime}']          = docDate;
+    m['{DocumentCreateTimeAR}']        = arabicDigits(docDate);         // Arabic date cell
     m['{UfCrm151776676644246}']        = d.buyerName;                          // Buyer Name
     m['{UfCrm151776677178207}']        = d.bodyAddress;                        // Address (all purchasers / company)
-    m['{UfCrm151776677041562}']        = field(c, deal, C_POBOX);             // P.O. Box
+    m['{UfCrm151776677041562}']        = field(c, deal, C_POBOX) ;             // P.O. Box
     m['{UfCrm151776408293897}']        = '';                                   // Emirate (removed)
     m['{UfCrm151776677095087}']        = field(c, deal, C_CITY);              // City
     m['{UfCrm151776677210899}']        = getMulti(c || {}, 'PHONE');          // Phone/Mobile (standard mobile)
