@@ -141,7 +141,7 @@ app.post("/render-pdf", async (req, res) => {
     const merged = await PDFDocument.create();
     try {
       const coverBytes = fs.readFileSync(path.join(__dirname, "cover.png"));
-      const coverImg = await merged.embedPng(coverBytes);
+      const coverImg = await merged.embedJpg(coverBytes);
       const A4W = 595.28,
         A4H = 841.89; // points
       const cover = merged.addPage([A4W, A4H]);
