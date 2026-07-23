@@ -1315,6 +1315,7 @@ async function renderSpa(d) {
     // 4) Right-align any Arabic text
     const arRe = /[\u0600-\u06FF]/;
     root.querySelectorAll('td, th, p, li, h1, h2, h3, span').forEach(function(el) {
+        if (el.classList.contains('bi-ltr')) return; 
         if (arRe.test(el.textContent || '')) { el.style.direction = 'rtl'; el.style.textAlign = 'right'; }
     });
 
