@@ -63,6 +63,21 @@
   padding-left: 2em;
   text-indent: -2em;
  }
+
+ #spaRoot .toc-heading,
+#spaRoot .toc-heading-ar {
+    text-align: center;
+    text-decoration: underline;
+}
+#spaRoot .hang-item {
+    text-align: justify;
+    padding-inline-start: 1.8em;
+    text-indent: -1.8em;
+    margin: 8px 0;
+}
+
+
+
   /* ── Keep these blocks from splitting across pages ── */
   #spaRoot .avoid-block { page-break-inside: avoid; }
   /* ── Pagination rules honored by the server-side Chrome print engine ── */
@@ -1316,7 +1331,7 @@ async function renderSpa(d) {
     // 4) Right-align any Arabic text
     const arRe = /[\u0600-\u06FF]/;
     root.querySelectorAll('td, th, p, li, h1, h2, h3, span').forEach(function(el) {
-        if (el.classList.contains('bi-ltr')) return; 
+        if (el.classList.contains('bi-ltr')|| el.classList.contains('no-autodir')) return; 
         if (arRe.test(el.textContent || '')) { el.style.direction = 'rtl'; el.style.textAlign = 'right'; }
     });
 
