@@ -1205,7 +1205,7 @@ async function loadUnitImage(pid, product) {
 const I_CITY = 'UfCrm151776677095087', I_COUNTRY = 'UfCrm151776677134809',
       I_NAT = 'UfCrm151776676964285', I_NOM_NAT = 'UfCrm151778950670679',
       I_PAYMODE = 'UfCrm151778950818534', I_PRICE_WORDS = 'UfCrm151778950758041',
-      I_NOM_NAME = 'UfCrm151778950656579';
+      I_NOM_NAME = 'UfCrm151778950656579'; I_PARKING = 'UfCrm151778950723706';
 
 function buildEnMap(d) {
     const deal = d.deal, c = d.buyer;
@@ -1253,6 +1253,7 @@ function arValueFor(inner, enMap, d) {
         case I_NOM_NAME:    return arText(en);
         case I_PAYMODE:     return arLookup(PAYMODE_AR, en);
         case I_PRICE_WORDS: return numToWordsAR(d.net) + ' درهم إماراتي فقط لا غير';
+        case I_PARKING:     return en;  
         default:            return arabicDigits(en);   // numbers/dates -> Arabic numerals; text unchanged
     }
 }
