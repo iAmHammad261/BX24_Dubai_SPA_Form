@@ -1236,7 +1236,7 @@ function buildEnMap(d) {
     m['{ProductsProductProperty177}']  = getProp(d.product, PROD_TYPE);        // Unit Type (property 177)
     m['{UnitTypeScheduleB}']           = getProp(d.product, PROD_TYPE) + (d.furnished === 'Yes' ? ' (Furnished)' : ''); 
     m['{ProductsProductFloor}']        = getProp(d.product, PROD_FLOOR);        // Floor (Schedule B)
-    m['{UfCrm151778950758041}']        = (numToWordsEN(d.net) + ' UAE Dirhams Only').trim();  // Total in words
+    m['{UfCrm151778950758041}']        = (numToWordsEN(d.net) + 'Only').trim();  // Total in words
     m['{UfCrm151778950818534}']        = resolvePayMode(field(c, deal, D_PAYMODE)); // Payment Mode (label)
     m['{DOWNPAYMENT_AMOUNT}']          = money(d.downpaymentAmt);             // actual down payment
     m['{UfCrm151778937940306}']        = amount(d.net);                       // Total Purchase Price (amount only; cell header is "Total: (AED)")
