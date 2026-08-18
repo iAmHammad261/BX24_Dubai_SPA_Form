@@ -169,6 +169,7 @@
 /* ════════════════ CONFIG ════════════════ */
 const JSON_FIELD     = 'UF_CRM_1781355927497';   // payment-plan JSON on the deal
 const SPA_FILE_FIELD = 'UF_CRM_1781467358140';   // file field to attach the SPA PDF
+const UPDATE_DEAL_URL = 'https://bx24paymentfieldbackend.pcirealestate.com/updateDeal';
 
 // Contact fields
 const C_TYPE        = 'UF_CRM_1767876111269';     // enum Purchaser 1 / 2 / Minor
@@ -1532,7 +1533,17 @@ async function attachToDeal() {
         const filename = 'Dubai_SPA_' + String(currentDealId) + '.pdf';
         const fields = {};
         fields[SPA_FILE_FIELD] = { fileData: [filename, data.base64] };
-        await callBX('crm.deal.update', { id: currentDealId, fields: fields });
+
+        const updateResp = await fetch(UPDATE_DEAL_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ dealId: currentDealId, fields: fields })
+        });
+        const updateData = await updateResp.json().catch(function() { return {}; });
+        if (!updateResp.ok || !updateData.success) {
+            const detailMsg = updateData.details ? ' (' + JSON.stringify(updateData.details) + ')' : '';
+            throw new Error((updateData.error || 'Failed to update deal') + detailMsg);
+        }
 
         setStatus('\u2713 Attached to the SPA field on the General tab.');
         btn.textContent = 'Attached \u2713';
